@@ -922,7 +922,11 @@ g++ main.o dm_motor.o unitree_motor.o robot.o -o robot_demo
 也可以在一个命令里让 `g++` 完成这两阶段：
 
 ```bash
-g++ apps/main.cpp     src/dm_motor.cpp     src/unitree_motor.cpp     src/robot.cpp     -Iinclude -std=c++17 -o robot_demo
+g++ apps/main.cpp \
+    src/dm_motor.cpp \
+    src/unitree_motor.cpp \
+    src/robot.cpp \
+    -Iinclude -std=c++17 -o robot_demo
 ```
 
 `-Iinclude` 表示把 `include/` 加入头文件搜索路径，所以代码可以写：
@@ -941,10 +945,13 @@ left_motor_.enable(
 
 编译器连这个 `.cpp` 都无法变成目标文件，这是**编译错误**。
 
-如果头文件里声明：
+如果头文件里的类已经声明：
 
 ```cpp
-void DMMotor::enable();
+class DMMotor {
+public:
+    void enable();
+};
 ```
 
 调用也能通过编译，但最终链接时没有把提供定义的 `dm_motor.cpp` 加进去，常见错误会包含：
