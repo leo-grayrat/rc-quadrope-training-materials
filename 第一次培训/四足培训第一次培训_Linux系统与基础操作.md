@@ -1,730 +1,353 @@
 # Linux 系统与基础操作
 
-本文面向后续机器人开发所需的基础 Linux 使用，主要介绍 Ubuntu、Linux 文件系统、常用命令、Python 程序运行、Shell 脚本、权限、软件安装、环境变量、进程与设备文件等内容。后续使用 ROS2、MuJoCo/MjLab、强化学习框架以及进行 sim2real 和实机部署时，都会频繁使用这些知识。
+这份讲义配合第一次培训的任务单使用。任务要求以仓库中的 `Linux系统及其操作-任务安排.pdf` 为准，本文不改写任务，也不直接给出任务的完整操作答案。
 
-------
+这一阶段真正需要建立的是一套基本的 Linux 操作直觉：知道自己现在在哪个目录、一个路径指向什么、为什么某个文件“存在但不能直接运行”、Shell 到底怎样找到一个命令，以及改过系统配置以后怎样恢复。后续 ROS 2、MuJoCo、强化学习环境和实机部署都会反复遇到这些问题。
 
-## 1. Linux、Ubuntu 与终端
+---
 
-### 1.1 Linux 与 Ubuntu
+## 1. 终端里到底发生了什么
 
-严格来说，Linux 指 Linux 内核（Linux Kernel），Ubuntu、Debian、Arch Linux、Fedora 等是在 Linux 内核基础上构建的 Linux 发行版。机器人开发中通常直接将这类系统统称为 Linux 系统。
-
-后续开发建议统一使用：
-
-```text
-Ubuntu 22.04
-```
-
-统一系统版本可以减少 ROS2、Python、CUDA、仿真器以及各种软件依赖之间的版本冲突。
-
-### 1.2 Terminal 与 Shell
-
-Ubuntu 中可以使用 `Ctrl + Alt + T` 打开终端（Terminal）。终端主要负责命令的输入与输出，真正解析和执行命令的是 Shell，Ubuntu 中最常见的是 Bash。
+Ubuntu 中按 `Ctrl + Alt + T` 可以打开 Terminal。Terminal 只是显示输入和输出的窗口，真正解释命令的是 Shell；Ubuntu 默认常见的是 Bash。
 
 例如：
 
 ```bash
-source ~/.bashrc
+python3 hello.py
 ```
 
-这里的 `source`、路径和参数由 Bash 解析并执行。
+Bash 会先找到 `python3`，再把 `hello.py` 作为参数交给 Python。
 
-因此，可以简单理解为：
-
-```text
-Terminal：命令交互界面
-Shell：命令解释器
-Bash：一种常用 Shell
-```
-
-------
-
-## 2. Linux 文件系统与路径
-
-Linux 没有 Windows 中 `C:\`、`D:\` 这样的盘符结构，整个文件系统从根目录 `/` 开始组织。
-
-常见目录包括：
-
-| 目录    | 主要用途             |
-| ------- | -------------------- |
-| `/home` | 普通用户的个人文件   |
-| `/etc`  | 系统和软件配置文件   |
-| `/usr`  | 程序、库以及系统资源 |
-| `/opt`  | 第三方软件、SDK 等   |
-| `/dev`  | 系统中的设备文件     |
-| `/tmp`  | 临时文件             |
-
-普通用户的主目录通常位于：
-
-```text
-/home/用户名
-```
-
-可以使用 `~` 表示当前用户的主目录，例如：
+而：
 
 ```bash
-cd ~
+./hello.py
 ```
 
-机器人开发中尤其需要关注 `/dev`。串口、USB 设备以及部分硬件接口通常会以设备文件形式出现，例如：
+含义完全不同：这次不是“让 Python 打开文件”，而是“把 `hello.py` 本身当作一个可执行程序运行”。这两个动作看起来只差几个字符，但后面关于权限、shebang、PATH 的很多问题都来自这个区别。
 
-```text
-/dev/ttyUSB0
-/dev/ttyACM0
-/dev/ttyS0
-```
-
-### 2.1 绝对路径与相对路径
-
-从根目录 `/` 开始书写的是绝对路径：
-
-```text
-/home/user/robocon/project
-```
-
-相对于当前工作目录书写的是相对路径。例如当前目录为：
-
-```text
-/home/user/robocon
-```
-
-则：
-
-```text
-project
-```
-
-表示：
-
-```text
-/home/user/robocon/project
-```
-
-三个常见特殊路径符号：
-
-```text
-.     当前目录
-..    上一级目录
-~     当前用户主目录
-```
-
-例如：
+遇到命令不理解时，可以先看：
 
 ```bash
-cd ..
-cd ~
-./hello.sh
+command --help
+man command
 ```
 
-其中 `./hello.sh` 表示执行当前目录中的 `hello.sh`。
+---
 
-------
+## 2. 路径：先回答“我现在在哪里”
 
-## 3. 常用文件与目录操作
+Linux 文件系统从根目录 `/` 开始。普通用户自己的文件通常放在 `/home/用户名`，Bash 中可以用 `~` 表示当前用户的 home。
 
-### 3.1 查看目录
-
-查看当前所在路径：
+几个最基础的命令：
 
 ```bash
 pwd
-```
-
-查看当前目录内容：
-
-```bash
 ls
+cd 目录
+cd ..
+mkdir 目录
+touch 文件
 ```
 
-常用参数：
+其中 `.` 表示当前目录，`..` 表示父目录。
+
+### 绝对路径与相对路径
+
+`/home/leo/robocon/learn` 是绝对路径，因为它从 `/` 开始；如果当前已经位于 `/home/leo/robocon`，那么 `learn` 和 `./learn` 都是相对当前目录解释的路径。
+
+`~/robocon/learn` 也能唯一定位文件，但 `~` 是 Shell 展开的 home 简写。
+
+做培训任务时，建议经常执行：
 
 ```bash
-ls -l      # 显示详细信息
-ls -a      # 显示隐藏文件
-ls -la     # 同时显示详细信息和隐藏文件
+pwd
+ls -l
 ```
 
-Linux 中以 `.` 开头的文件通常为隐藏文件，例如：
+很多“文件找不到”其实只是当前目录与自己想象的不一致。
 
-```text
-.bashrc
-.git
-```
+---
 
-### 3.2 切换目录
+## 3. 创建、复制、移动与删除
+
+常用操作：
 
 ```bash
-cd dirname       # 进入子目录
-cd ..            # 返回上一级
-cd ~             # 返回用户主目录
-cd /absolute/path
-```
-
-### 3.3 创建文件和目录
-
-```bash
-touch test.txt
-mkdir demo
-```
-
-`touch` 常用于创建空文件，`mkdir` 用于创建目录。
-
-### 3.4 复制、移动和重命名
-
-复制文件：
-
-```bash
-cp file1 file2
-```
-
-复制目录：
-
-```bash
-cp -r dir1 dir2
-```
-
-移动文件：
-
-```bash
-mv file demo/
-```
-
-`mv` 同样可以用于重命名：
-
-```bash
-mv old_name.txt new_name.txt
-```
-
-### 3.5 删除
-
-删除文件：
-
-```bash
+mkdir -p a/b/c
+cp source.txt copy.txt
+mv old.txt new.txt
 rm file.txt
 ```
 
-删除目录：
+`mv` 同时承担“移动”和“重命名”。查看文本文件可以使用 `cat`、`less`、`head`、`tail`。
+
+删除操作尤其要慢一点。培训初期不要养成看到问题就直接 `rm -rf ...` 的习惯；`rm` 通常没有类似桌面回收站的恢复流程。
+
+---
+
+## 4. 为什么 Python 文件有时能运行、有时不能
+
+先建立一个和正式任务无关的小例子：
+
+```python
+print("hello")
+```
+
+假设它保存为 `demo.py`。
+
+### 交给解释器运行
 
 ```bash
-rm -r directory
+python3 demo.py
 ```
 
-需要特别注意，命令行中的 `rm` 通常不会经过回收站，删除后很难恢复。使用：
+这里要求的是 Bash 能找到 `python3`，并且 Python 能读取 `demo.py`。`demo.py` 自己不需要具有执行权限。
+
+### 直接执行文件
+
+如果写：
 
 ```bash
-rm -rf
+./demo.py
 ```
 
-前必须确认目标路径正确，尤其不要直接运行来源不明或自己无法理解的删除命令。
+系统会把文件本身当成程序执行。此时至少有两个新问题。
 
-### 3.6 查看文本文件
-
-对于较短文本，可以直接使用：
+第一，文件是否有执行权限：
 
 ```bash
-cat file.txt
+ls -l demo.py
+chmod u+x demo.py
 ```
 
-实际开发中还会经常使用 `less`、`head`、`tail` 等工具，例如：
+第二，系统必须知道“用什么解释这个文本文件”。脚本第一行通常使用 shebang：
+
+```python
+#!/usr/bin/env python3
+
+print("hello")
+```
+
+因此，**能被 `python3 file.py` 运行，不等于这个文件本身已经是一个可以直接执行的命令。**
+
+这正是第一次任务中要求观察失败、再解释原因的核心知识之一。做任务时请自己完成对应操作，不要把这里的小例子机械替换文件名当作答案。
+
+---
+
+## 5. 为什么 `./demo.py` 能运行，输入 `demo.py` 却可能不行
+
+Bash 收到 `demo.py` 时，不会默认搜索当前目录，而会按环境变量 `PATH` 中列出的目录依次寻找可执行文件。
+
+查看 PATH：
 
 ```bash
-head file.txt
-tail file.txt
-tail -f log.txt
+echo "$PATH"
 ```
 
-其中 `tail -f` 常用于实时观察程序日志。
-
-------
-
-## 4. 通配符与文件查找
-
-Shell 支持使用通配符批量匹配文件，其中最常见的是 `*`，表示匹配任意数量的字符。
-
-例如：
-
-```bash
-ls *.py
-```
-
-表示查看当前目录中的所有 Python 文件。
-
-```bash
-ls /dev/tty*
-```
-
-表示查看 `/dev` 下名称以 `tty` 开头的设备文件。
-
-查找文件可以使用：
-
-```bash
-find . -name "*.py"
-```
-
-其中 `.` 表示从当前目录开始搜索。
-
-------
-
-## 5. Python 与程序运行
-
-Ubuntu 中通常直接使用：
-
-```bash
-python3
-```
-
-查看 Python 版本：
-
-```bash
-python3 --version
-```
-
-运行 Python 文件：
-
-```bash
-python3 main.py
-```
-
-这条命令实际上包含两个部分：
-
-```text
-python3    Python 解释器
-main.py    需要执行的 Python 程序
-```
-
-系统首先寻找 `python3` 对应的程序，再由 Python 解释器读取并执行 `main.py`。
-
-可以使用：
+查看一个命令实际来自哪里：
 
 ```bash
 which python3
+command -v python3
 ```
 
-查看当前执行的程序位于什么位置，例如：
-
-```text
-/usr/bin/python3
-```
-
-`which` 在使用 Python 虚拟环境、ROS2、CUDA 等环境时非常有用，因为同一个程序可能同时存在多个版本。
-
-例如：
+假设你有一个专门存放自己脚本的目录 `/home/用户名/bin`，可以在当前 Shell 中临时加入：
 
 ```bash
-which python3
-which pip
-which code
+export PATH="$HOME/bin:$PATH"
 ```
 
-### VS Code
+关闭终端后，这个临时修改不会自动保留。要让新打开的 Bash 也使用这项设置，需要把对应命令放进 `~/.bashrc`。
 
-在已经配置 VS Code 命令行工具的情况下，可以使用：
+修改配置前建议先备份：
 
 ```bash
-code .
+cp ~/.bashrc ~/.bashrc.backup
 ```
 
-直接用 VS Code 打开当前目录。
-
-机器人项目通常建议以“工程目录”为单位使用 VS Code，而不只是单独打开某一个源文件。
-
-------
-
-## 6. Shell 脚本与执行权限
-
-当程序启动需要连续执行多条命令时，可以将命令保存到 Shell 脚本中，例如：
+修改后可以：
 
 ```bash
-#!/bin/bash
-
 source ~/.bashrc
-cd ~/project
-python3 main.py
 ```
 
-通常将 Bash 脚本保存为：
+在当前终端重新加载。任务最后要求恢复修改，所以实验时必须知道自己改了哪几行，而不是只知道“复制一条命令进去”。
 
-```text
-xxx.sh
-```
+---
 
-执行脚本可以使用：
+## 6. `.bashrc` 为什么能影响新终端
+
+Bash 启动交互式 Shell 时会读取用户的 `~/.bashrc`。因此如果在其中加入一条输出命令，每次新开终端都会再次执行。
+
+这同时说明为什么不应该随意把大量启动命令塞进 `.bashrc`：如果写错，每个新终端都会重复出问题。
+
+排查最近修改可以用：
 
 ```bash
-./xxx.sh
+tail -n 20 ~/.bashrc
 ```
 
-如果出现：
+正式任务要求最后恢复相关修改。恢复时优先删除自己增加的行；如果使用备份，也要确认备份确实来自修改之前。
 
-```text
-Permission denied
-```
+---
 
-通常说明文件没有执行权限。
+## 7. Shell 脚本与执行权限
 
-### Linux 文件权限
-
-使用：
+Bash 脚本最小形式：
 
 ```bash
-ls -l
+#!/usr/bin/env bash
+
+echo "hello"
 ```
 
-可能看到：
-
-```text
--rw-r--r--
-```
-
-常见权限包括：
-
-```text
-r    read，读取
-w    write，写入
-x    execute，执行
-```
-
-为脚本增加执行权限：
+保存为 `demo.sh` 后，可以：
 
 ```bash
-chmod +x xxx.sh
+bash demo.sh
 ```
 
-之后即可：
+也可以在具有执行权限时直接：
 
 ```bash
-./xxx.sh
+./demo.sh
 ```
 
-实际项目中经常会看到：
+第二种方式仍然依赖执行权限和 shebang。Python 脚本与 Bash 脚本在“直接执行”这件事上的原理是相通的。任务让你把同一流程再用 Bash 做一次，重点就是确认这个规律，而不是记住两套无关命令。
 
-```bash
-chmod +x install.sh
-./install.sh
-```
+---
 
-------
+## 8. 软件安装、deb 与 CPU 架构
 
-## 7. 软件安装与 CPU 架构
-
-### 7.1 apt 软件包管理
-
-Ubuntu 最常用的软件包管理工具之一是 `apt`。
-
-更新软件包索引：
+Ubuntu 常用 `apt` 管理软件包：
 
 ```bash
 sudo apt update
+sudo apt install 包名
 ```
 
-安装软件：
-
-```bash
-sudo apt install tree
-```
-
-其中 `sudo` 表示以管理员权限执行当前命令。输入用户密码时，终端一般不会显示字符，这是正常现象。
-
-`apt update` 主要更新本地的软件包信息，本身通常不会升级已经安装的软件。
-
-### 7.2 `.deb` 软件包
-
-部分软件会直接提供 `.deb` 安装包，可以使用：
+下载到本地的 `.deb` 可以使用：
 
 ```bash
 sudo apt install ./package.deb
 ```
 
-其中：
+这里的 `./` 告诉 apt 这是当前目录中的本地文件。
 
-```text
-./
-```
-
-表示当前目录。
-
-相比直接使用 `dpkg -i`，使用 `apt install ./xxx.deb` 通常能够更方便地自动处理依赖关系。
-
-### 7.3 CPU 架构
-
-下载 Linux 软件时经常会看到：
-
-```text
-amd64
-x86_64
-arm64
-aarch64
-```
-
-它们表示 CPU 指令集架构。
-
-查看当前系统架构：
+查看机器架构：
 
 ```bash
 uname -m
+dpkg --print-architecture
 ```
 
-普通 Intel / AMD PC 通常输出：
+常见对应关系：
 
-```text
-x86_64
-```
+| 常见名称 | 含义 |
+|---|---|
+| `x86_64` / `amd64` | 常见 Intel / AMD 64 位电脑 |
+| `aarch64` / `arm64` | ARM 64 位平台 |
 
-Jetson 等 ARM 平台通常输出：
+下载 deb 时必须匹配架构，也应只使用可信来源。
 
-```text
-aarch64
-```
+---
 
-因此下载安装包时不仅要确认 Ubuntu 版本，还需要确认 CPU 架构是否匹配。
+## 9. 通配符、正则表达式与 `/dev`
 
-------
+第一次任务会让你查看 `/dev` 中包含 `tty` 的设备文件。先区分两种匹配。
 
-## 8. 环境变量与 `.bashrc`
-
-环境变量用于给程序提供运行环境中的参数和路径信息，在 Python、CUDA、ROS2 和机器人 SDK 中非常常见。
-
-创建环境变量：
-
-```bash
-export ROBOT_NAME=black
-```
-
-读取变量：
-
-```bash
-echo $ROBOT_NAME
-```
-
-输出：
-
-```text
-black
-```
-
-通过 `export` 设置的变量通常只在当前 Shell 会话及其子进程中有效。关闭终端后重新打开，该变量一般不会继续存在。
-
-如果希望每次打开 Bash 时自动设置某些环境变量，可以将命令加入：
-
-```text
-~/.bashrc
-```
-
-例如：
-
-```bash
-export ROBOT_NAME=black
-```
-
-修改后执行：
-
-```bash
-source ~/.bashrc
-```
-
-即可在当前 Shell 中立即重新加载配置，无需重新打开终端。
-
-`source` 的作用可以理解为：在当前 Shell 环境中执行指定脚本中的命令。
-
-后续 ROS2 中经常会遇到：
-
-```bash
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-```
-
-本质上也是利用 `source` 修改当前终端的运行环境。
-
-------
-
-## 9. 进程基础
-
-程序运行后会在 Linux 中形成进程（Process），每个进程都有对应的 PID（Process ID）。
-
-查看当前终端相关进程：
-
-```bash
-ps
-```
-
-动态查看系统进程和资源占用：
-
-```bash
-top
-```
-
-如果知道某个进程 PID，可以发送终止信号：
-
-```bash
-kill PID
-```
-
-例如：
-
-```bash
-kill 12345
-```
-
-在终端中运行前台程序时，通常也可以使用：
-
-```text
-Ctrl + C
-```
-
-终止当前程序。
-
-对于机器人程序、ROS2 节点、训练程序和仿真器，进程管理是后续排查程序没有正常退出、GPU/CPU 被占用等问题的基础。
-
-------
-
-## 10. 串口与设备文件
-
-Linux 将许多硬件设备抽象成文件，这些设备文件通常位于：
-
-```text
-/dev
-```
-
-常见串口包括：
-
-```text
-/dev/ttyS0
-/dev/ttyUSB0
-/dev/ttyACM0
-```
-
-一般可以初步理解为：
-
-| 设备      | 常见含义         |
-| --------- | ---------------- |
-| `ttyS*`   | 主机原生串口     |
-| `ttyUSB*` | USB 转串口设备   |
-| `ttyACM*` | USB CDC ACM 设备 |
-
-机器人开发中的 USB 转串口模块、电机控制器、STM32、IMU 等设备都可能使用这些设备节点。
-
-查找串口：
+Shell 通配符是在命令执行前由 Bash 展开：
 
 ```bash
 ls /dev/tty*
 ```
 
-只查 USB 串口：
+而：
 
 ```bash
-ls /dev/ttyUSB*
+ls /dev | grep 'tty'
 ```
 
-查找 ACM 设备：
+是先产生文本，再由 `grep` 过滤。二者不是同一种语法。
+
+`/dev` 也不是普通资料目录。Linux 会把很多设备暴露为特殊文件。以后机器人常见 `/dev/ttyUSB0`、`/dev/ttyACM0`，它们可能对应 USB 转串口等设备。
+
+如果程序能看到设备却打不开，除了代码错误，还要检查：
 
 ```bash
-ls /dev/ttyACM*
+ls -l /dev/ttyUSB0
 ```
 
-如果设备插入后不确定生成了哪个设备文件，可以在插入设备之后查看最近的内核日志：
+确认设备权限和所属用户组。
+
+---
+
+## 10. 进程：程序运行以后去了哪里
+
+前台运行程序时，终端会等待它结束。查看进程可以使用：
 
 ```bash
-dmesg | tail
+ps
+ps aux
 ```
 
-后续实际使用串口时，还可能遇到设备访问权限问题，需要进一步理解用户组、`dialout` 权限以及 `udev` 规则。
-
-------
-
-## 11. 常用命令速查
+查找某类进程：
 
 ```bash
-# 当前目录
+ps aux | grep python
+```
+
+`Ctrl + C` 通常向当前前台程序发送中断信号。
+
+第一次任务不要求深入进程管理，但之后跑仿真、ROS 2 节点和训练程序时，至少要有“程序是一个进程，而不是终端窗口本身”的概念。
+
+---
+
+## 11. 做任务时的排错顺序
+
+如果某一步失败，不要随机改命令，先判断是哪一层。
+
+**文件在哪里**
+
+```bash
 pwd
-
-# 查看目录
-ls
 ls -l
-ls -a
-ls -la
-
-# 切换目录
-cd xxx
-cd ..
-cd ~
-
-# 创建文件与目录
-touch file
-mkdir dir
-
-# 复制
-cp file1 file2
-cp -r dir1 dir2
-
-# 移动 / 重命名
-mv old new
-
-# 删除
-rm file
-rm -r dir
-
-# 查看文本
-cat file
-head file
-tail file
-tail -f file
-
-# 文件查找
-find . -name "*.py"
-
-# Python
-python3 --version
-python3 main.py
-which python3
-
-# Shell 脚本与权限
-chmod +x script.sh
-./script.sh
-
-# 软件管理
-sudo apt update
-sudo apt install package
-sudo apt install ./package.deb
-
-# CPU 架构
-uname -m
-
-# 环境变量
-export ROBOT_NAME=black
-echo $ROBOT_NAME
-source ~/.bashrc
-
-# 串口与设备
-ls /dev/tty*
-ls /dev/ttyUSB*
-ls /dev/ttyACM*
-dmesg | tail
-
-# 进程
-ps
-top
-kill PID
-
-# 其他
-history
-clear
 ```
 
-------
+**文件内容对不对**
 
-## 12. 本阶段需要掌握的能力
+```bash
+cat 文件名
+head 文件名
+```
 
-完成这部分学习后，至少应能够独立完成以下操作：
+**自己现在是哪种运行方式**
 
-- 理解 Linux、Ubuntu、Terminal 和 Shell 之间的基本关系；
-- 理解 Linux 文件系统、绝对路径和相对路径；
-- 使用命令行完成目录切换、文件创建、复制、移动、删除和查找；
-- 使用终端运行 Python 程序，并通过 `which` 判断实际使用的程序；
-- 编写并运行简单 Bash 脚本，理解基本文件权限；
-- 使用 `apt` 和 `.deb` 安装软件，并区分 x86_64 与 aarch64；
-- 理解环境变量、`.bashrc` 和 `source` 的作用；
-- 完成基本的进程查看和终止；
-- 在 `/dev` 中查找串口和其他硬件设备。
+想清楚下面三条为什么不同：
 
-这些内容不要求一次记住全部命令。更重要的是理解 Linux 的基本组织方式，并能够在遇到实际问题时判断应该从路径、权限、环境、进程还是设备文件等方向进行检查。
+```text
+python3 file.py
+./file.py
+file.py
+```
+
+直接执行失败时检查执行权限、shebang 和路径；只写文件名找不到时检查 `PATH`；新终端和当前终端行为不一致时检查临时 `export` 与 `~/.bashrc` 的区别。
+
+---
+
+## 12. 本阶段完成后应当能解释
+
+完成第一次培训任务后，至少应该能结合自己做过的操作说明：
+
+- 绝对路径、相对路径、`~`、`.`、`..` 分别是什么；
+- 为什么 `python3 a.py` 成功不代表 `./a.py` 一定成功；
+- 执行权限与 shebang 各解决什么问题；
+- 为什么 `./a.py` 和直接输入 `a.py` 的查找方式不同；
+- PATH 是什么，`~/.bashrc` 又在什么时候发挥作用；
+- 为什么任务最后要恢复 `.bashrc` 和环境变量；
+- 本地 deb 安装时为什么要关心 CPU 架构；
+- `/dev/tty*` 为什么和后续机器人串口设备有关；
+- 出错时怎样先判断是路径、权限、环境还是程序本身的问题。
+
+如果这些问题能结合任务过程解释清楚，这一阶段的 Linux 基础就已经达到了后续培训所需要的程度。
