@@ -34,6 +34,36 @@ mj_step(model, data)
 
 后续强化学习策略也只是“控制程序”的一种：神经网络读取观测，输出动作；MuJoCo 仍然负责物理状态怎样变化。
 
+### 安装与环境检查
+
+Ubuntu 中先确认 Python 和 pip：
+
+```bash
+python3 --version
+python3 -m pip --version
+```
+
+安装 MuJoCo Python 包：
+
+```bash
+python3 -m pip install mujoco
+```
+
+随后可以直接验证：
+
+```bash
+python3 -c "import mujoco; print(mujoco.__version__)"
+```
+
+如果以后出现“明明安装过却 import 失败”，先检查：
+
+```bash
+which python3
+python3 -m pip show mujoco
+```
+
+很多这类问题本质上是“安装时用的 Python”和“运行脚本时用的 Python”不是同一个环境。后续项目多起来以后再学习 venv 或 Conda 做环境隔离。
+
 ### MjModel 与 MjData
 
 Python 中最常见的两行是：
@@ -105,6 +135,14 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
 python3 simulate.py
 ```
 
+也可以直接用 MuJoCo 自带 Viewer 打开一个 MJCF 文件：
+
+```bash
+python3 -m mujoco.viewer --mjcf=scene.xml
+```
+
+这个方式适合先检查“模型能不能加载、位置和几何是否正常”；而 `launch_passive()` 更适合自己编写控制循环。
+
 如果方块在重力作用下落到地面，说明至少下面几件事已经通了：
 
 - Python 能 import MuJoCo；
@@ -117,20 +155,45 @@ python3 simulate.py
 
 ---
 
-## 3. MJCF 中最先要看懂的四类东西
+## 3. MJCF 中最先要看懂的结构
 
 MuJoCo 原生模型格式是 MJCF。它是 XML，但不要把注意力放在 XML 语法本身，先看模型表达了什么。
 
-一个最简结构可能是：
+一个常见的顶层结构可能是：
 
 ```xml
 <mujoco model="example">
+    <compiler/>
     <option/>
-    <asset/>
-    <worldbody/>
-    <actuator/>
+
+    <asset>
+        ...
+    </asset>
+
+    <worldbody>
+        ...
+    </worldbody>
+
+    <actuator>
+        ...
+    </actuator>
+
+    <sensor>
+        ...
+    </sensor>
 </mujoco>
 ```
+
+这些部分不需要现在全部深入：
+
+- `compiler`：模型解析、资源目录等编译设置；
+- `option`：时间步长、重力等仿真选项；
+- `asset`：mesh、材质、纹理等资源；
+- `worldbody`：世界和机器人刚体结构；
+- `actuator`：执行器；
+- `sensor`：仿真传感器。
+
+本次任务最先需要看懂 `worldbody`、`asset` 和 `actuator`。
 
 ### body：刚体与坐标系
 
@@ -445,9 +508,27 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
 
 ---
 
-## 13. 怎样阅读 `unitree_mujoco` 一类项目
+## 13. 怎样整理自己的程序，再阅读 `unitree_mujoco`
 
-人工任务要求在基础程序完成后阅读 `unitree_mujoco` 并改进自己的程序结构。不要一上来从仓库第一行读到最后一行。
+人工任务要求在基础程序完成后阅读 `unitree_mujoco` 并改进自己的程序结构。在进入完整开源工程前，可以先把自己的单文件程序按职责拆开。例如：
+
+```text
+mujoco_project/
+├── models/
+│   └── robot.xml
+├── scenes/
+│   └── flat_scene.xml
+├── src/
+│   ├── robot.py
+│   ├── controller.py
+│   └── simulator.py
+├── main.py
+└── README.md
+```
+
+这不是必须照抄的模板。它只是在提醒你：模型、场景、机器人状态接口、控制器和主循环是不同职责。几十行程序时放在一个文件里没有问题；功能继续增加以后再拆。
+
+然后再读 `unitree_mujoco`。不要一上来从仓库第一行读到最后一行。
 
 先找四件事。
 
@@ -516,6 +597,18 @@ sensor
 ---
 
 ## 14. 常见问题的排查顺序
+
+出现问题时，先打印少量关键量：
+
+```python
+print("time:", data.time)
+print("nq, nv, nu:", model.nq, model.nv, model.nu)
+print("qpos:", data.qpos)
+print("qvel:", data.qvel)
+print("ctrl:", data.ctrl)
+```
+
+数组很长时只看和当前问题相关的一小段。调试顺序最好是：先确认模型加载，再确认初始姿态，再确认执行器数量和索引，最后再看控制后的运动。
 
 ### import 失败
 
