@@ -72,10 +72,11 @@ bash test.sh
 
 脚本会：
 
-1. 在临时目录中重新执行 CMake 配置和构建；
-2. 运行 `robot_demo` 并核对完整输出；
-3. 额外编译 `tests/test_robot.cpp`；
-4. 检查两种电机的状态保存与输出；
-5. 使用测试电机检查 `Robot` 对两侧 `Motor&` 的调用。
+1. 在临时目录中重新执行 CMake 配置；
+2. 分别构建 `robot_core` 和 `robot_demo`；
+3. 运行 `robot_demo` 并核对完整输出；
+4. 额外编译 `tests/test_robot.cpp`；
+5. 检查两种电机的状态保存与输出；
+6. 使用测试电机检查 `Robot` 对两侧 `Motor&` 的调用。
 
 所有测试通过时脚本返回 0。
