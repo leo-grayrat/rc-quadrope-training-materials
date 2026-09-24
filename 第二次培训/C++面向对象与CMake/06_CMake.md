@@ -206,3 +206,21 @@ robot.move(-0.80);
 重新构建并运行，检查相关输出是否都变成 `-0.80 rad`。
 
 还可以暂时从 `CMakeLists.txt` 中去掉一个 `.cpp`，重新构建并观察链接器给出的错误。确认错误以后再把源文件加回来。
+
+## 本地自测
+
+完成 `starter/05_cmake/` 后，在该目录运行：
+
+```bash
+bash test.sh
+```
+
+脚本依次检查：
+
+1. `cmake -S . -B ...` 能否完成配置；
+2. CMake 能否成功构建 `robot_demo`；
+3. `robot_demo` 的完整输出；
+4. `DMMotor`、`UnitreeMotor` 的状态保存和输出；
+5. `Robot` 是否通过 `Motor&` 正确调用左右两台电机。
+
+测试使用临时构建目录，不会把测试产物留在工程目录中。
