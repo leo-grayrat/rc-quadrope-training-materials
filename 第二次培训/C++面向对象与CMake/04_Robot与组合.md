@@ -1,18 +1,10 @@
 # Robot 与组合
 
-继承表达的是：
+上一节建立了统一的 `Motor` 接口。接下来把两台电机放进一个 `Robot` 对象中。
 
-```text
-DMMotor is a Motor
-```
+`DMMotor` 和 `Motor` 是继承关系：`DMMotor` 属于 `Motor` 的一种具体实现。
 
-但机器人与电机之间不是这种关系。机器人不是一种电机，而是**使用电机**：
-
-```text
-Robot has Motors
-```
-
-真实系统中还可能有：
+`Robot` 和 `Motor` 的关系不同。机器人内部使用电机，还可能使用 IMU、控制器、相机等部件：
 
 ```text
 Robot
@@ -23,11 +15,11 @@ Robot
 └── ...
 ```
 
-这类关系通常通过成员对象、引用、指针等方式表达，统称为组合关系。本文仍然只使用左右两台电机，以免同时引入容器、资源所有权等额外问题。
+这种“一个对象内部持有或使用其他对象”的结构通常称为组合。
 
-## 为什么 Robot 不直接写 DMMotor
+## Robot 依赖 Motor 接口
 
-如果写：
+如果 `Robot` 直接保存具体的 DM 电机：
 
 ```cpp
 class Robot {
@@ -37,9 +29,9 @@ private:
 };
 ```
 
-那么这个 `Robot` 从类型上已经绑定 DM 电机。以后右腿想换 Unitree，就必须修改 `Robot`。
+那么 `Robot` 的定义已经和 `DMMotor` 绑定。以后如果一侧改用 Unitree 电机，`Robot` 本身也要修改。
 
-如果 `Robot` 只依赖 `Motor` 接口：
+改成保存 `Motor` 引用：
 
 ```cpp
 class Robot {
@@ -49,11 +41,13 @@ private:
 };
 ```
 
-那么左右两边可以是任何满足接口的实现。
+以后左右两侧可以分别传入 `DMMotor`、`UnitreeMotor`，或者其他实现了 `Motor` 接口的类型。
+
+这样，`Robot` 只需要知道电机具有 `enable()`、`setPosition()`、`getPosition()` 这些操作。
 
 ## 引用成员与生命周期
 
-引用成员必须在构造时绑定，因此构造函数需要初始化列表：
+引用成员必须在构造对象时完成绑定，所以构造函数需要使用初始化列表：
 
 ```cpp
 Robot(Motor& left_motor, Motor& right_motor)
@@ -63,11 +57,7 @@ Robot(Motor& left_motor, Motor& right_motor)
 }
 ```
 
-这里的 `Robot` **不拥有**这两台电机，它只是引用外部已经存在的对象。因此必须保证：
-
-> `Robot` 使用这些引用期间，被引用的电机对象仍然存在。
-
-下面的顺序是安全的：
+这里的两个引用都指向外部已经存在的电机对象。创建顺序可以写成：
 
 ```cpp
 DMMotor left(1);
@@ -75,47 +65,25 @@ UnitreeMotor right(2);
 Robot robot(left, right);
 ```
 
-因为 `robot` 会先析构，然后才轮到在它之前创建的 `right` 和 `left`。
+三个对象都位于同一作用域时，析构顺序与创建顺序相反：先析构 `robot`，再析构 `right` 和 `left`。因此 `robot` 存在期间，它引用的两台电机也仍然存在。
 
-在更复杂项目中，“谁拥有对象、谁只借用对象、对象活多久”会成为很重要的问题。本文暂时不引入 `std::unique_ptr` / `std::shared_ptr`，但至少要知道引用并不会自动延长对象生命周期。
+引用不会延长对象生命周期。以后如果对象由其他模块创建、动态创建，或者生命周期更复杂，就需要进一步考虑所有权和智能指针。
 
 ## 动手：实现 Robot
 
-假设前一节的 `Motor`、`DMMotor`、`UnitreeMotor` 已经写好。
-
-这次补全 `Robot`，起始代码放在：
+起始代码：
 
 - [starter/04_robot/main.cpp](./starter/04_robot/main.cpp)
 
-前一节的电机接口与两种具体电机已经给定，这次只补 `Robot` 中的 TODO。
+`Motor`、`DMMotor`、`UnitreeMotor` 已经给好，只实现 `Robot` 中的三个函数：
 
-测试代码：
+- `initialize()`：输出初始化信息，然后依次使能左右电机；
+- `move(position)`：向左右电机发送相同目标位置；
+- `printStatus()`：打印左右电机当前位置。
 
-```cpp
-int main()
-{
-    DMMotor left_motor(1);
-    UnitreeMotor right_motor(2);
-    Robot robot(left_motor, right_motor);
+测试入口已经写在 starter 的 `main()` 中。
 
-    robot.initialize();
-    robot.move(1.50);
-    robot.printStatus();
-
-    return 0;
-}
-```
-
-`Robot` 自己需要额外输出：
-
-```text
-Robot initialization...
-Set robot target position: 1.50 rad
-Left motor position: 1.50 rad
-Right motor position: 1.50 rad
-```
-
-结合电机自身输出，完整结果应为：
+完整输出应为：
 
 ```text
 Robot initialization...
@@ -176,6 +144,4 @@ private:
 
 </details>
 
-到这里为止，我们仍然可以把所有类放在一个 `main.cpp`。这适合学习概念，却不适合继续扩展。下一步开始进入真正的工程组织。
-
----
+到这里，程序已经有多个类。下一节开始把这些类拆到不同文件中。
