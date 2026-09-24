@@ -31,20 +31,20 @@ bool close(double a, double b)
 }
 
 template <typename T, typename = void>
-struct has_public_id : std::false_type {
+struct has_public_id_member : std::false_type {
 };
 
 template <typename T>
-struct has_public_id<T, std::void_t<decltype(std::declval<T&>().id)>>
+struct has_public_id_member<T, std::void_t<decltype(std::declval<T&>().id_)>>
     : std::true_type {
 };
 
 template <typename T, typename = void>
-struct has_public_position : std::false_type {
+struct has_public_position_member : std::false_type {
 };
 
 template <typename T>
-struct has_public_position<T, std::void_t<decltype(std::declval<T&>().position)>>
+struct has_public_position_member<T, std::void_t<decltype(std::declval<T&>().position_)>>
     : std::true_type {
 };
 
@@ -59,8 +59,8 @@ int main()
           "getPosition works on const Motor");
     check(!std::is_convertible<int, Motor>::value,
           "single-argument constructor is explicit");
-    check(!has_public_id<Motor>::value, "id is not publicly writable");
-    check(!has_public_position<Motor>::value, "position is not publicly writable");
+    check(!has_public_id_member<Motor>::value, "id is not publicly writable");
+    check(!has_public_position_member<Motor>::value, "position is not publicly writable");
 
     check(motor.setPosition(3.14), "upper boundary is accepted");
     check(close(const_motor.getPosition(), 3.14), "upper boundary is stored");
