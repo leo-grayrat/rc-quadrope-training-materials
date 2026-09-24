@@ -102,7 +102,7 @@ cmake --build build
 目标结构：
 
 ```text
-oop_cmake_starter/
+05_cmake/
 ├── CMakeLists.txt
 ├── README.md
 ├── apps/
