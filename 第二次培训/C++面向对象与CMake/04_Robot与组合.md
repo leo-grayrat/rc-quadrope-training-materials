@@ -83,9 +83,7 @@ Robot robot(left, right);
 
 假设前一节的 `Motor`、`DMMotor`、`UnitreeMotor` 已经写好。
 
-补全下面的 `Robot`：
-
-起始代码放在：
+这次补全 `Robot`，起始代码放在：
 
 - [starter/04_robot/main.cpp](./starter/04_robot/main.cpp)
 
