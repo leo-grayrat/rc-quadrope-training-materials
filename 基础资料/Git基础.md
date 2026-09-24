@@ -12,6 +12,44 @@
 
 ---
 
+## 使用前先做：安装和身份配置
+
+Ubuntu / Debian 系统可以先确认 Git 是否已经安装：
+
+```bash
+git --version
+```
+
+没有时安装：
+
+```bash
+sudo apt update
+sudo apt install git
+```
+
+第一次正式提交前，设置提交者姓名和邮箱：
+
+```bash
+git config --global user.name "Your Name"
+git config --global user.email "you@example.com"
+```
+
+这些信息会写进之后的 commit 元数据。还可以统一新仓库的默认分支名：
+
+```bash
+git config --global init.defaultBranch main
+```
+
+查看当前配置：
+
+```bash
+git config --list
+```
+
+如果主要在 WSL 中开发，应把 WSL 当作独立的 Linux 环境：Windows 里已经装过 Git，并不等于 WSL 里已经有同样的 Git 配置、SSH 密钥和用户信息。
+
+---
+
 ## 1. Git 和 GitHub 不是一回事
 
 Git 是版本控制系统，运行在本地。GitHub 是托管 Git 仓库并提供协作功能的网站。
@@ -152,6 +190,23 @@ git clone <仓库地址>
 git remote -v
 ```
 
+如果本地已经有一个 `git init` 创建的项目，而 GitHub 上刚建立了一个空仓库，可以：
+
+```bash
+git remote add origin git@github.com:USER/REPO.git
+git push -u origin main
+```
+
+第一次的 `-u` 会建立当前分支和远程分支的跟踪关系，之后通常可以直接 `git push` / `git pull`。
+
+### git fetch
+
+```bash
+git fetch origin
+```
+
+只获取远程的新提交和分支信息，不直接改当前工作分支。想先看看远程发生了什么、暂时不整合时，`fetch` 比 `pull` 更适合。
+
 ### git pull
 
 常用来获取远程更新并整合到当前分支。
@@ -250,6 +305,14 @@ API Key
 
 `.gitignore` 只会自动忽略**尚未被 Git 跟踪**的匹配文件。如果文件已经提交过，仅仅后来写进 `.gitignore` 并不会自动从历史中消失。
 
+如果希望保留本地文件、但停止继续跟踪它，可以在确认路径无误后使用：
+
+```bash
+git rm --cached 文件
+```
+
+对于真正需要版本化的大型二进制文件再考虑 Git LFS；构建产物、缓存、日志和可重新下载的模型一般更适合忽略。
+
 ---
 
 ## 7. 分支：把实验和稳定版本隔开
@@ -314,6 +377,14 @@ git commit
 
 不要看到冲突就随便 `git reset --hard`。先知道哪些修改是自己的、哪些已经提交、哪些还只在工作区。
 
+如果确认这次 merge 本身就不该继续，并且尚未完成，可以了解：
+
+```bash
+git merge --abort
+```
+
+它用于尝试回到这次合并开始前的状态。
+
 ---
 
 ## 9. 做错以后，先判断“错在哪一层”
@@ -359,6 +430,14 @@ git log --oneline
 培训阶段一个很安全的原则是：**已经 push 并且别人可能基于它继续工作的历史，不要随意强行重写。**
 
 `reset --hard`、强制 push 等命令不是不能用，而是在你明确知道会丢掉什么之前不要把它们当作日常撤销键。
+
+如果错误提交已经发布到别人也会使用的分支，更常见的思路是用新的提交撤销旧提交：
+
+```bash
+git revert <commit-id>
+```
+
+而不是强行让远程历史倒退。
 
 ---
 
