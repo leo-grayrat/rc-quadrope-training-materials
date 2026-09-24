@@ -1,40 +1,44 @@
 # Git 基础
 
-这份资料服务于整个四足培训期间的代码提交和版本记录。它不是 Git 命令大全；先把培训中每天都会用到的工作流弄清楚，再在真正遇到复杂协作时学习 rebase、cherry-pick 等操作。
+这份资料用于培训期间的代码管理。先掌握日常提交、同步和恢复操作，rebase、cherry-pick、reflog 等工具以后遇到具体需求再学。
 
-培训阶段最重要的是能够自己完成：
+常用工作流：
 
 ```text
-查看修改 -> 确认差异 -> 暂存 -> 提交 -> 同步到 GitHub
+查看修改
+  ↓
+确认差异
+  ↓
+暂存
+  ↓
+提交
+  ↓
+推送到 GitHub
 ```
 
-以及在做错时知道自己目前改了什么，而不是第一反应删目录重新来。
+## 安装和身份配置
 
----
-
-## 使用前先做：安装和身份配置
-
-Ubuntu / Debian 系统可以先确认 Git 是否已经安装：
+检查 Git：
 
 ```bash
 git --version
 ```
 
-没有时安装：
+Ubuntu / Debian 中安装：
 
 ```bash
 sudo apt update
 sudo apt install git
 ```
 
-第一次正式提交前，设置提交者姓名和邮箱：
+设置提交者姓名和邮箱：
 
 ```bash
 git config --global user.name "Your Name"
 git config --global user.email "you@example.com"
 ```
 
-这些信息会写进之后的 commit 元数据。还可以统一新仓库的默认分支名：
+统一新仓库默认分支名：
 
 ```bash
 git config --global init.defaultBranch main
@@ -46,15 +50,13 @@ git config --global init.defaultBranch main
 git config --list
 ```
 
-如果主要在 WSL 中开发，应把 WSL 当作独立的 Linux 环境：Windows 里已经装过 Git，并不等于 WSL 里已经有同样的 Git 配置、SSH 密钥和用户信息。
+WSL 中的 Git 配置与 Windows 主机互相独立。Windows 已经配置过 Git 或 SSH，并不会自动同步到 WSL。
 
----
+## Git 与 GitHub
 
-## 1. Git 和 GitHub 不是一回事
+Git 负责本地版本历史。GitHub 用来托管远程 Git 仓库，并提供协作、Pull Request、Issue 等功能。
 
-Git 是版本控制系统，运行在本地。GitHub 是托管 Git 仓库并提供协作功能的网站。
-
-没有 GitHub，也可以：
+本地没有连接 GitHub 时，下面这些命令仍然可以正常使用：
 
 ```bash
 git init
@@ -63,22 +65,11 @@ git commit
 git log
 ```
 
-只是历史保存在本机。
+连接 GitHub 后，可以把本地 commit 推到远程。
 
-有了 GitHub，可以把本地提交推到远程，用于同步、备份、代码评审和多人协作。
+## 工作区、暂存区和 commit
 
-培训中可以简单理解成：
-
-```text
-Git    管版本历史
-GitHub 放远程仓库并协作
-```
-
----
-
-## 2. Git 最需要先理解的三个位置
-
-在一个仓库中，先把这三个状态分开：
+一个仓库里可以先区分三个位置：
 
 ```text
 工作区 -> 暂存区 -> commit 历史
@@ -86,103 +77,79 @@ GitHub 放远程仓库并协作
 
 ### 工作区
 
-就是你正在编辑的真实文件。
+当前磁盘上的文件，也就是正在编辑的内容。
 
 ### 暂存区
 
-保存“下一次 commit 准备记录哪些修改”。
-
-### commit
-
-把暂存区当前内容记录为一个新的版本。
-
-因此：
+保存下一次 commit 准备记录的修改。
 
 ```bash
 git add 文件
 ```
 
-并不是“把文件上传到 GitHub”；它只是把当前修改放进暂存区。
+会把指定文件当前的修改加入暂存区。
+
+### commit
 
 ```bash
 git commit -m "说明"
 ```
 
-也不会自动上传；它只是创建本地提交。
+把暂存区记录为一个新的本地版本。
 
-真正向远程同步通常还要：
+commit 仍然位于本地。需要同步到 GitHub 时再执行：
 
 ```bash
 git push
 ```
 
----
+## 一次正常提交
 
-## 3. 每次修改最常用的循环
-
-进入仓库后第一件事可以先看：
+先看状态：
 
 ```bash
 git status
 ```
 
-它会告诉你：
-
-- 当前分支；
-- 哪些文件被修改；
-- 哪些是新文件；
-- 哪些修改已经进入暂存区。
-
-提交之前再看实际差异：
+查看尚未暂存的修改：
 
 ```bash
 git diff
 ```
 
-已经 `git add` 的内容可以看：
-
-```bash
-git diff --staged
-```
-
-然后只暂存本次真正要提交的文件：
+暂存需要提交的文件：
 
 ```bash
 git add README.md src/main.cpp
 ```
 
-再次：
+查看已经暂存的差异：
 
 ```bash
-git status
 git diff --staged
 ```
 
-确认后：
+确认以后提交：
 
 ```bash
 git commit -m "完成基础仿真循环"
 ```
 
-最后：
+推送：
 
 ```bash
 git push
 ```
 
-这个循环比背几十条 Git 命令重要得多。
+提交前先看 `git status` 和 `git diff`，可以避免把无关文件一起提交。
 
----
+## clone、remote、fetch、pull、push
 
-## 4. clone、pull、push 分别做什么
-
-已有远程仓库时：
+克隆已有仓库：
 
 ```bash
 git clone <仓库地址>
 ```
-
-会把仓库与历史复制到本地，并建立远程 `origin`。
 
 查看远程：
 
@@ -190,95 +157,89 @@ git clone <仓库地址>
 git remote -v
 ```
 
-如果本地已经有一个 `git init` 创建的项目，而 GitHub 上刚建立了一个空仓库，可以：
+如果本地已经通过 `git init` 建好仓库，再连接一个新的 GitHub 空仓库：
 
 ```bash
 git remote add origin git@github.com:USER/REPO.git
 git push -u origin main
 ```
 
-第一次的 `-u` 会建立当前分支和远程分支的跟踪关系，之后通常可以直接 `git push` / `git pull`。
+`-u` 会建立本地分支和远程分支的跟踪关系。
 
-### git fetch
+### fetch
 
 ```bash
 git fetch origin
 ```
 
-只获取远程的新提交和分支信息，不直接改当前工作分支。想先看看远程发生了什么、暂时不整合时，`fetch` 比 `pull` 更适合。
+获取远程提交和分支信息，不自动修改当前分支。
 
-### git pull
-
-常用来获取远程更新并整合到当前分支。
-
-在多人协作或者多台电脑切换时，开始工作前通常先确认：
+### pull
 
 ```bash
-git status
 git pull
 ```
 
-不要在自己有一堆未确认本地修改时盲目 pull；先看 status，知道自己当前状态。
+获取远程更新并整合到当前分支。
 
-### git push
+执行前先看：
 
-把本地已经存在的 commit 推到远程。
+```bash
+git status
+```
 
-如果只是修改了文件却没有 commit，`git push` 不会帮你自动记录这些工作区修改。
+如果工作区还有未处理的修改，先明确这些修改应该提交、暂存还是丢弃。
 
----
+### push
 
-## 5. 第一次连接 GitHub：推荐理解 SSH
+```bash
+git push
+```
 
-Linux 开发环境长期使用 GitHub 时，SSH 比反复输入凭据方便。
+把本地已有的 commit 推到远程。工作区中尚未 commit 的文件不会被自动上传。
 
-先看是否已有密钥：
+## 使用 SSH 连接 GitHub
+
+检查已有密钥：
 
 ```bash
 ls -al ~/.ssh
 ```
 
-没有合适密钥时可以生成：
+生成 Ed25519 密钥：
 
 ```bash
 ssh-keygen -t ed25519 -C "你的邮箱"
 ```
 
-公钥通常是：
+常见文件：
 
 ```text
-~/.ssh/id_ed25519.pub
+~/.ssh/id_ed25519       私钥
+~/.ssh/id_ed25519.pub   公钥
 ```
 
-私钥通常是：
+把公钥加入 GitHub。私钥应一直保存在自己的机器上，不上传到仓库，也不要发送给别人。
 
-```text
-~/.ssh/id_ed25519
-```
-
-**只能把公钥内容加入 GitHub；私钥不要上传、不要提交到仓库、不要发给别人。**
-
-测试：
+测试连接：
 
 ```bash
 ssh -T git@github.com
 ```
 
-SSH 仓库地址类似：
+SSH 仓库地址通常形如：
 
 ```text
 git@github.com:USER/REPO.git
 ```
 
-HTTPS 也可以正常使用，但 GitHub 的 Git 操作不能再直接使用账户密码作为认证。若选择 HTTPS，应使用合适的 token / credential manager / GitHub CLI 等认证方式。
+HTTPS 也可以使用，需要通过 token、credential manager、GitHub CLI 等方式完成认证。
 
----
+## .gitignore
 
-## 6. .gitignore：哪些东西不应该进仓库
+构建产物、缓存和临时文件通常不提交到仓库。
 
-构建目录、缓存和临时文件通常不值得进入版本历史。
-
-例如 C++ 工程常见：
+C++ 常见：
 
 ```gitignore
 build/
@@ -292,40 +253,34 @@ __pycache__/
 *.pyc
 ```
 
-还要特别避免提交：
+还应避免提交：
 
 ```text
 密码
 Token
 SSH 私钥
 API Key
-大体积无关数据
-本地 IDE 缓存
+IDE 缓存
+可重新生成的大型构建产物
 ```
 
-`.gitignore` 只会自动忽略**尚未被 Git 跟踪**的匹配文件。如果文件已经提交过，仅仅后来写进 `.gitignore` 并不会自动从历史中消失。
-
-如果希望保留本地文件、但停止继续跟踪它，可以在确认路径无误后使用：
+`.gitignore` 只影响尚未被 Git 跟踪的文件。已经被跟踪的文件需要先停止跟踪：
 
 ```bash
 git rm --cached 文件
 ```
 
-对于真正需要版本化的大型二进制文件再考虑 Git LFS；构建产物、缓存、日志和可重新下载的模型一般更适合忽略。
+大型二进制文件如果确实需要版本化，可以再考虑 Git LFS。
 
----
+## 分支
 
-## 7. 分支：把实验和稳定版本隔开
-
-分支可以先理解为指向某条提交历史当前位置的名字。
-
-查看：
+查看分支：
 
 ```bash
 git branch
 ```
 
-创建并切换：
+创建并切换分支：
 
 ```bash
 git switch -c experiment
@@ -337,28 +292,26 @@ git switch -c experiment
 git switch main
 ```
 
-如果实验已经完成并需要合回主分支：
+合并：
 
 ```bash
 git switch main
 git merge experiment
 ```
 
-培训初期不要求复杂分支策略，但当你准备做一项可能破坏当前可运行版本的实验时，开一个分支往往比复制出 `project_final2_backup` 更清楚。
+做可能破坏当前可运行版本的实验时，可以先建立独立分支。这样实验过程和主分支历史都比较清楚。
 
----
+## 合并冲突
 
-## 8. 冲突不是“Git 坏了”
+两个分支修改同一位置时，Git 可能无法自动合并。
 
-当两个分支修改了同一位置且 Git 无法自动判断如何合并时，会产生冲突。
-
-先：
+先查看：
 
 ```bash
 git status
 ```
 
-冲突文件中可能出现：
+冲突文件中会出现类似：
 
 ```text
 <<<<<<< HEAD
@@ -368,50 +321,48 @@ git status
 >>>>>>> other
 ```
 
-这些标记不是最终代码。你需要人工决定保留什么、删掉标记，然后：
+人工选择最终内容，删除冲突标记，然后：
 
 ```bash
 git add 冲突文件
 git commit
 ```
 
-不要看到冲突就随便 `git reset --hard`。先知道哪些修改是自己的、哪些已经提交、哪些还只在工作区。
-
-如果确认这次 merge 本身就不该继续，并且尚未完成，可以了解：
+如果决定取消尚未完成的 merge：
 
 ```bash
 git merge --abort
 ```
 
-它用于尝试回到这次合并开始前的状态。
+冲突期间不要直接使用 `git reset --hard` 清理现场，除非已经确认哪些未提交修改会被删除。
 
----
+## 恢复修改
 
-## 9. 做错以后，先判断“错在哪一层”
+不同阶段使用不同命令。
 
-### 文件改了但还没 add
+### 工作区已经修改，还没有 add
 
-先看：
+查看：
 
 ```bash
 git diff
 ```
 
-如果明确要丢弃某个文件的工作区修改，可以使用：
+丢弃某个文件的工作区修改：
 
 ```bash
 git restore 文件
 ```
 
-### 已经 add，但还没 commit
+### 已经 add，还没有 commit
 
-看：
+查看：
 
 ```bash
 git diff --staged
 ```
 
-想把文件从暂存区拿回来、但保留工作区修改：
+移出暂存区并保留工作区修改：
 
 ```bash
 git restore --staged 文件
@@ -419,33 +370,23 @@ git restore --staged 文件
 
 ### 已经 commit
 
-先：
+先看历史：
 
 ```bash
 git log --oneline
 ```
 
-再决定应该新建一个修正 commit、revert，还是在尚未共享的个人分支上改写历史。
-
-培训阶段一个很安全的原则是：**已经 push 并且别人可能基于它继续工作的历史，不要随意强行重写。**
-
-`reset --hard`、强制 push 等命令不是不能用，而是在你明确知道会丢掉什么之前不要把它们当作日常撤销键。
-
-如果错误提交已经发布到别人也会使用的分支，更常见的思路是用新的提交撤销旧提交：
+如果错误 commit 已经推送到公共分支，可以新建一个反向提交：
 
 ```bash
 git revert <commit-id>
 ```
 
-而不是强行让远程历史倒退。
+尚未共享的个人分支可以根据具体情况修改本地历史。使用 `reset --hard` 或强制 push 前，应先确认会删除哪些提交和工作区修改。
 
----
+## 培训仓库
 
-## 10. 培训仓库推荐工作流
-
-第一次建立个人培训仓库后，后续每次任务都在同一个仓库中继续。
-
-例如：
+建议整个培训阶段使用同一个个人仓库，例如：
 
 ```text
 quadruped-training-xxx/
@@ -456,7 +397,7 @@ quadruped-training-xxx/
 └── ...
 ```
 
-一次任务不要只留下最后一个 `final` commit。开发过程中可以按实际进展提交：
+一次任务可以按实际进度提交多次：
 
 ```text
 建立基础目录
@@ -466,9 +407,9 @@ quadruped-training-xxx/
 整理运行说明
 ```
 
-提交信息不需要模仿大型公司的格式，但应至少能让未来的自己知道这次改了什么。
+commit message 能说明这次修改内容即可。
 
-提交前习惯性检查：
+提交前：
 
 ```bash
 git status
@@ -476,19 +417,15 @@ git diff
 git diff --staged
 ```
 
-完成后：
+查看最近历史：
 
 ```bash
 git log --oneline --decorate -n 10
 ```
 
-看看自己的历史是否真的能读懂。
+## 自练习
 
----
-
-## 11. 一个很小的自练习
-
-不要拿正式任务仓库试危险操作。可以单独建一个临时目录：
+单独建立一个练习仓库：
 
 ```bash
 mkdir git_practice
@@ -496,24 +433,20 @@ cd git_practice
 git init -b main
 ```
 
-自己完成下面几件事：
+完成下面几步：
 
 1. 新建 `note.txt`，写一行内容并提交；
-2. 再修改一行，先用 `git diff` 看变化；
-3. `git add` 后比较 `git diff` 与 `git diff --staged`；
+2. 修改文件，用 `git diff` 查看变化；
+3. `git add` 后使用 `git diff --staged`；
 4. 创建第二个 commit；
-5. 用 `git log --oneline` 查看两次提交；
-6. 创建 `experiment` 分支，再改一次文件；
-7. 回到 `main`，观察工作区内容为什么变回主分支版本；
+5. 使用 `git log --oneline` 查看历史；
+6. 建立 `experiment` 分支并修改文件；
+7. 切回 `main`，观察工作区内容变化；
 8. 合并 `experiment`。
 
-如果这些步骤都能自己做出来，Git 的最小工作模型已经建立了。
+## 培训阶段需要掌握的命令
 
----
-
-## 12. 培训阶段先掌握这些就够用
-
-必须熟练：
+经常使用：
 
 ```text
 git clone
@@ -532,8 +465,10 @@ git log
 .gitignore
 工作区 / 暂存区 / commit
 本地分支 / 远程分支
+fetch / pull / push
 merge 与冲突
-restore 的基本用法
+restore
+revert
 ```
 
-rebase、cherry-pick、reflog、bisect、submodule 等工具以后遇到真实需求再学。Git 不是靠一次背完整命令表掌握的，而是在每次提交前都知道“现在有哪些修改、下一次 commit 到底会记录什么”。
+rebase、cherry-pick、reflog、bisect、submodule 等内容留到后续实际项目中再学。
