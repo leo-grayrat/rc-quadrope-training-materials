@@ -1,33 +1,38 @@
 # CMake
 
-手动编译四个 `.cpp` 还能接受。等工程变成二十个、五十个文件，再自己维护命令很容易漏文件或写错依赖。
+上一节已经可以手动编译多文件工程：
 
-CMake **不是编译器**。可以把流程理解为：
+```bash
+g++ apps/main.cpp \
+    src/dm_motor.cpp \
+    src/unitree_motor.cpp \
+    src/robot.cpp \
+    -Iinclude -std=c++17 -o robot_demo
+```
+
+文件继续增加以后，手工维护这条命令会越来越麻烦。CMake 用来记录工程中的构建关系，再生成 Makefile、Ninja 等构建系统需要的文件。
+
+一个简化后的流程是：
 
 ```text
 CMakeLists.txt
       ↓
     CMake
       ↓
-Makefile / Ninja 等构建规则
+Makefile / Ninja
       ↓
   构建工具
       ↓
      g++
       ↓
-目标文件、库、可执行程序
+库和可执行文件
 ```
 
-CMake 的重要作用，是把：
+因此 CMake 本身不负责把 C++ 源码编译成机器代码，真正执行编译的仍然是编译器。
 
-- 有哪些 target；
-- target 由哪些源文件组成；
-- 头文件从哪里查找；
-- target 之间怎样依赖；
+## executable target
 
-写进可以维护的工程描述。
-
-## 最简单的可执行 target
+最简单的 `CMakeLists.txt` 可以直接建立一个可执行目标：
 
 ```cmake
 cmake_minimum_required(VERSION 3.16)
@@ -46,11 +51,31 @@ add_executable(robot_demo
 target_include_directories(robot_demo PRIVATE include)
 ```
 
-`add_executable` 定义一个可执行 target。`target_include_directories` 给这个 target 增加头文件搜索目录。
+这里定义了一个名为 `robot_demo` 的 target。
 
-## 为什么还会有 library target
+`add_executable()` 指定它由哪些源文件组成：
 
-如果核心机器人代码以后不仅被一个 demo 使用，而是还要被测试程序、ROS 2 节点或其他工具复用，更自然的结构是：
+```cmake
+add_executable(robot_demo
+    ...
+)
+```
+
+`target_include_directories()` 给这个 target 增加头文件搜索路径：
+
+```cmake
+target_include_directories(robot_demo PRIVATE include)
+```
+
+这样编译时就能找到：
+
+```cpp
+#include "robot/motor.hpp"
+```
+
+## library target
+
+核心机器人代码还可以单独编译成库：
 
 ```cmake
 add_library(robot_core
@@ -65,39 +90,57 @@ add_executable(robot_demo apps/main.cpp)
 target_link_libraries(robot_demo PRIVATE robot_core)
 ```
 
-这里：
+这里有两个 target：
 
-- `robot_core` 是一组可复用的已编译代码；
-- `robot_demo` 包含 `main()`，可以直接运行；
-- `robot_demo` 链接 `robot_core`。
+- `robot_core`：包含电机和机器人实现；
+- `robot_demo`：包含 `main()`，生成最终可执行程序。
 
-`PUBLIC` 与 `PRIVATE` 描述的是依赖是否向使用者传播。这里 `robot_core` 的公开头文件就在 `include/`，使用 `robot_core` 的 target 也需要知道这个 include 路径，因此写 `PUBLIC`。而 `robot_demo` 自己链接 `robot_core`，不需要把这层依赖继续传播给其他 target，因此写 `PRIVATE`。
+`target_link_libraries()` 表示 `robot_demo` 需要链接 `robot_core`。
 
-现在不必背一整套 CMake 关键字。先抓住 target：**先问“我要构建什么”，再问“这个 target 需要哪些源文件和依赖”。**
+### PUBLIC 与 PRIVATE
 
-## out-of-source build
+`robot_core` 的公开头文件位于 `include/`。使用 `robot_core` 的其他 target 也需要这个 include 路径，因此写：
 
-推荐：
+```cmake
+target_include_directories(robot_core PUBLIC include)
+```
+
+`robot_demo` 对 `robot_core` 的依赖只属于自己：
+
+```cmake
+target_link_libraries(robot_demo PRIVATE robot_core)
+```
+
+后面接触更复杂的 CMake 项目时还会遇到 `INTERFACE`。当前练习先掌握 `PUBLIC` 和 `PRIVATE` 的基本含义。
+
+## 单独使用 build 目录
+
+推荐把构建产物放在源码目录之外：
 
 ```bash
 cmake -S . -B build
 cmake --build build
+```
+
+第一条命令读取当前目录中的 `CMakeLists.txt`，并把生成的构建文件写入 `build/`。
+
+第二条命令执行实际构建。
+
+完成后运行：
+
+```bash
 ./build/robot_demo
 ```
 
-构建产物集中在 `build/`，源码目录保持干净。需要完全重新配置时，也可以删除 `build/` 后重建，而不必手工寻找散落在源码目录里的中间文件。
-
----
+这样中间文件、目标文件和可执行程序都集中在 `build/` 中。需要重新配置时，也可以直接删除 `build/` 后重新生成。
 
 ## 动手：完成 mini_robot 多文件工程
 
-仓库中提供：
+工程骨架：
 
 - [starter/05_cmake](./starter/05_cmake/)
 
-这一次不再要求从空目录猜最终工程应该长什么样。目录、头文件接口和测试入口已经提供，你需要补齐实现与构建描述。
-
-目标结构：
+目录结构：
 
 ```text
 05_cmake/
@@ -117,13 +160,13 @@ cmake --build build
     └── unitree_motor.cpp
 ```
 
-### 8.1 需要完成什么
+需要完成：
 
-1. 完成三个 `src/*.cpp` 中的 TODO；
-2. 完成 `CMakeLists.txt`；
-3. 构建并运行 `robot_demo`；
-4. 不修改公开接口来绕开任务；
-5. 能解释编译单元、链接、include 路径和 CMake target 分别在做什么。
+1. 三个 `src/*.cpp` 中的 TODO；
+2. `CMakeLists.txt`；
+3. 使用 CMake 构建 `robot_demo`；
+4. 运行并核对输出；
+5. 能说明头文件搜索路径、library target、executable target 和链接关系。
 
 构建：
 
@@ -148,9 +191,7 @@ Left motor position: 1.50 rad
 Right motor position: 1.50 rad
 ```
 
-### 8.2 完成以后再做一次现场修改
-
-把：
+完成以后，把：
 
 ```cpp
 robot.move(1.50);
@@ -162,17 +203,6 @@ robot.move(1.50);
 robot.move(-0.80);
 ```
 
-重新：
+重新构建并运行，检查相关输出是否都变成 `-0.80 rad`。
 
-```bash
-cmake --build build
-./build/robot_demo
-```
-
-确认所有相关位置都变为 `-0.80 rad`。
-
-随后尝试故意从 `CMakeLists.txt` 中漏掉一个实现文件，再构建，观察错误发生在什么阶段。恢复后重新构建。
-
-这一步不是为了制造麻烦，而是让“编译”和“链接”不只停留在定义上。
-
----
+还可以暂时从 `CMakeLists.txt` 中去掉一个 `.cpp`，重新构建并观察链接器给出的错误。确认错误以后再把源文件加回来。
