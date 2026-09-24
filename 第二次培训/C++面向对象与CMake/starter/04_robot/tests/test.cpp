@@ -46,6 +46,11 @@ public:
         return position_;
     }
 
+    void forcePosition(double position)
+    {
+        position_ = position;
+    }
+
     int enable_count = 0;
     int set_count = 0;
 
@@ -67,26 +72,32 @@ int main()
     robot.initialize();
     robot.move(-0.80);
 
-    left.setPosition(-0.25);
-    right.setPosition(0.75);
-    robot.printStatus();
-
     std::cout.rdbuf(old_buffer);
 
     check(left.enable_count == 1, "initialize enables left motor once");
     check(right.enable_count == 1, "initialize enables right motor once");
-    check(left.set_count == 2 && right.set_count == 2,
+    check(left.set_count == 1 && right.set_count == 1,
           "Robot move calls each motor exactly once");
+    check(close(left.getPosition(), -0.80) && close(right.getPosition(), -0.80),
+          "Robot move sends the same target to both motors");
 
-    check(close(left.getPosition(), -0.25), "left motor state remains independent");
-    check(close(right.getPosition(), 0.75), "right motor state remains independent");
+    left.forcePosition(-0.25);
+    right.forcePosition(0.75);
+
+    std::ostringstream status_output;
+    old_buffer = std::cout.rdbuf(status_output.rdbuf());
+    robot.printStatus();
+    std::cout.rdbuf(old_buffer);
+
+    check(status_output.str() ==
+              "Left motor position: -0.25 rad\n"
+              "Right motor position: 0.75 rad\n",
+          "printStatus reads two independent motor states");
 
     check(output.str() ==
               "Robot initialization...\n"
-              "Set robot target position: -0.80 rad\n"
-              "Left motor position: -0.25 rad\n"
-              "Right motor position: 0.75 rad\n",
-          "Robot output and status reading");
+              "Set robot target position: -0.80 rad\n",
+          "initialize and move output");
 
     std::cout << passed << " / " << total << " tests passed" << std::endl;
     return passed == total ? 0 : 1;
