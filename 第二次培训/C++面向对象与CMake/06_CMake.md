@@ -28,7 +28,7 @@ Makefile / Ninja
 库和可执行文件
 ```
 
-因此 CMake 本身不负责把 C++ 源码编译成机器代码，真正执行编译的仍然是编译器。
+CMake 读取 `CMakeLists.txt` 并生成构建规则；C++ 源码最终仍由 `g++` 等编译器处理。
 
 ## executable target
 
