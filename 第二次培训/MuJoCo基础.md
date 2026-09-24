@@ -1,92 +1,89 @@
 # MuJoCo 与机器人仿真基础
 
-这份讲义配合第二次培训的 [任务.md](./任务.md) 使用。**任务原文是要求本身，本文不改任务，也不提供一份可以直接提交的完整机器狗程序。**
+这份讲义配合第二次培训的 [任务.md](./任务.md) 使用。任务要求以任务文件为准，这里补充完成任务需要的 MuJoCo 基础。
 
-这一阶段需要解决的不是“把 MuJoCo 的所有 API 记住”，而是先建立一条最小仿真链路：
-
-```text
-模型文件 -> MuJoCo 编译模型 -> 运行状态 -> 写入控制量 -> 推进一步 -> 查看新的状态
-```
-
-完成以后，你应该能自己把一份机器人模型放进平坦场景，知道关节状态和执行器控制量在哪里，能解释零力矩意味着什么，并能继续阅读 `unitree_mujoco` 一类真实项目。
-
-> 本文以 MuJoCo 3.x 的官方 Python 接口为主。MuJoCo 仍在更新，接口细节以官方文档为准：https://mujoco.readthedocs.io/
-
----
-
-## 1. MuJoCo 在程序里扮演什么角色
-
-MuJoCo 是刚体动力学与接触仿真器。对于四足机器人，它根据模型中的质量、惯量、关节、碰撞几何和执行器等信息，在给定控制输入后计算下一时刻的状态。
-
-最小控制循环可以理解为：
+仿真程序可以先看成下面这条链路：
 
 ```text
-读取当前状态
-    ↓
-控制程序计算控制量
-    ↓
-写入 data.ctrl
-    ↓
-mj_step(model, data)
-    ↓
-得到下一时刻 qpos / qvel / ...
+模型文件
+  ↓
+MjModel
+  ↓
+MjData
+  ↓
+写入控制量
+  ↓
+mj_step()
+  ↓
+更新后的状态
 ```
 
-后续强化学习策略也只是“控制程序”的一种：神经网络读取观测，输出动作；MuJoCo 仍然负责物理状态怎样变化。
+后面的内容都围绕这几个对象展开。
 
-### 安装与环境检查
+> 以下示例使用 MuJoCo 3.x 的 Python 接口。接口细节可以查官方文档：https://mujoco.readthedocs.io/
 
-Ubuntu 中先确认 Python 和 pip：
+## 安装与环境检查
+
+先确认当前 Python 和 pip：
 
 ```bash
 python3 --version
 python3 -m pip --version
 ```
 
-安装 MuJoCo Python 包：
+安装：
 
 ```bash
 python3 -m pip install mujoco
 ```
 
-随后可以直接验证：
+检查安装结果：
 
 ```bash
 python3 -c "import mujoco; print(mujoco.__version__)"
 ```
 
-如果以后出现“明明安装过却 import 失败”，先检查：
+如果出现 `ModuleNotFoundError`，继续看：
 
 ```bash
 which python3
 python3 -m pip show mujoco
 ```
 
-很多这类问题本质上是“安装时用的 Python”和“运行脚本时用的 Python”不是同一个环境。后续项目多起来以后再学习 venv 或 Conda 做环境隔离。
+这两条命令可以确认运行脚本时使用的 Python，以及 MuJoCo 安装到了哪个 Python 环境。
 
-### MjModel 与 MjData
+项目多起来以后可以再使用 venv 或 Conda 管理不同环境。
 
-Python 中最常见的两行是：
+## MjModel 与 MjData
+
+加载 MJCF：
 
 ```python
 model = mujoco.MjModel.from_xml_path("scene.xml")
 data = mujoco.MjData(model)
 ```
 
-`MjModel` 保存编译后的**模型结构和参数**，例如关节、执行器、质量、时间步长等；`MjData` 保存仿真过程中不断变化的**当前状态和计算结果**。
+`MjModel` 保存编译后的模型信息，例如：
 
-先记住这个区分：
+- body、joint、geom；
+- 质量和惯量；
+- actuator；
+- 时间步长；
+- 其他模型参数。
 
-```text
-model：这个系统是什么
- data：这个系统现在处于什么状态
-```
+`MjData` 保存运行过程中的状态和计算结果，例如：
 
----
+- `qpos`；
+- `qvel`；
+- `ctrl`；
+- 当前仿真时间；
+- 接触和传感器结果。
 
-## 2. 先跑一个和机器狗无关的小模型
+`MjModel` 创建后基本保持不变，`MjData` 会随着仿真步不断更新。
 
-在处理 URDF、mesh 和十几个关节以前，先用一个方块确认 MuJoCo 环境和基本调用链路。
+## 一个最小模型
+
+先用一个方块熟悉加载、step 和 Viewer。
 
 创建 `scene.xml`：
 
@@ -135,31 +132,19 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
 python3 simulate.py
 ```
 
-也可以直接用 MuJoCo 自带 Viewer 打开一个 MJCF 文件：
+也可以直接打开模型：
 
 ```bash
 python3 -m mujoco.viewer --mjcf=scene.xml
 ```
 
-这个方式适合先检查“模型能不能加载、位置和几何是否正常”；而 `launch_passive()` 更适合自己编写控制循环。
+前者适合自己控制仿真循环，后者适合快速检查模型。
 
-如果方块在重力作用下落到地面，说明至少下面几件事已经通了：
+如果方块能落到地面，说明模型已经成功加载，Viewer 可以工作，`mj_step()` 也在正常推进状态。
 
-- Python 能 import MuJoCo；
-- XML 能成功编译；
-- `MjData` 能创建；
-- `mj_step()` 在推进物理；
-- Viewer 能显示当前状态。
+## MJCF 的基本结构
 
-这段代码是理解 MuJoCo 的小实验，不是第二次任务的机器狗答案。
-
----
-
-## 3. MJCF 中最先要看懂的结构
-
-MuJoCo 原生模型格式是 MJCF。它是 XML，但不要把注意力放在 XML 语法本身，先看模型表达了什么。
-
-一个常见的顶层结构可能是：
+MJCF 是 MuJoCo 原生 XML 模型格式。常见顶层元素包括：
 
 ```xml
 <mujoco model="example">
@@ -184,69 +169,67 @@ MuJoCo 原生模型格式是 MJCF。它是 XML，但不要把注意力放在 XML
 </mujoco>
 ```
 
-这些部分不需要现在全部深入：
+常见作用：
 
-- `compiler`：模型解析、资源目录等编译设置；
-- `option`：时间步长、重力等仿真选项；
-- `asset`：mesh、材质、纹理等资源；
-- `worldbody`：世界和机器人刚体结构；
-- `actuator`：执行器；
-- `sensor`：仿真传感器。
+| 元素 | 用途 |
+|---|---|
+| `compiler` | 模型解析和资源目录等设置 |
+| `option` | 时间步长、重力等仿真参数 |
+| `asset` | mesh、材质、纹理等资源 |
+| `worldbody` | 世界和机器人刚体结构 |
+| `actuator` | 执行器 |
+| `sensor` | 仿真传感器 |
 
-本次任务最先需要看懂 `worldbody`、`asset` 和 `actuator`。
+### body
 
-### body：刚体与坐标系
+`body` 表示刚体，也形成坐标系层级。子 body 的位置和姿态相对父 body 定义。
 
-`body` 通过嵌套形成运动学树。子 body 的位姿相对父 body 定义。
+### joint
 
-### joint：允许怎样相对运动
-
-例如：
+`joint` 描述 body 相对父 body 的可运动自由度：
 
 ```xml
 <joint name="hip" type="hinge" axis="0 1 0"/>
 ```
 
-表示当前 body 相对父 body 有一个绕指定轴旋转的自由度。
+这里定义了一个绕给定轴旋转的关节。
 
-如果一个 body 没有 joint，它默认与父 body 固连。
+如果一个 body 没有 joint，它与父 body 固连。
 
-### geom：形状、碰撞与可视几何
+### geom
 
-`geom` 可以是 box、sphere、capsule、mesh 等。它既可能参与碰撞，也可能用于显示和惯量推断，具体由属性决定。
+`geom` 描述几何体，可以使用 box、sphere、capsule、mesh 等类型。它可能参与显示、碰撞和惯量计算，具体取决于属性设置。
 
-### inertial：质量与惯量
+### inertial
 
-动力学仿真不仅需要“长什么样”，还需要“有多重、质量怎样分布”。很多模型会显式给出 inertial；有时 MuJoCo 也会从 geom 推断。
+`inertial` 描述质量、质心和惯量。动力学异常时，质量、惯量和碰撞几何都值得检查。
 
-如果模型外观看起来正常但一仿真就猛烈抖动、翻飞，质量、惯量、碰撞形状和初始穿模都值得检查。
+## 自由基座与 qpos
 
----
-
-## 4. 自由基座为什么让 qpos 看起来不像“关节数”
-
-四足机器人机身通常不是固定在世界坐标系，而是可以在三维空间自由移动。MJCF 中常见：
+四足机器人机身通常可以在世界坐标系中自由移动，因此常见：
 
 ```xml
 <freejoint/>
 ```
 
-自由基座具有三维平移和三维转动自由度，但姿态通常用四元数存储，因此它在 `qpos` 中占 7 个数，在 `qvel` 中占 6 个数。
+自由基座具有 3 个平移自由度和 3 个旋转自由度。MuJoCo 在 `qpos` 中使用四元数保存姿态，所以自由基座占 7 个 `qpos` 元素；在 `qvel` 中占 6 个元素。
 
-所以：
+因此：
 
 ```text
-model.nq 不一定等于 model.nv
+model.nq
+model.nv
 ```
 
-这是第一次读四足 MuJoCo 代码时很容易困惑的地方。
+可能不同。
 
-可以先打印：
+查看模型维度：
 
 ```python
 print("nq =", model.nq)
 print("nv =", model.nv)
 print("nu =", model.nu)
+
 print("qpos =", data.qpos)
 print("qvel =", data.qvel)
 print("ctrl =", data.ctrl)
@@ -254,26 +237,22 @@ print("ctrl =", data.ctrl)
 
 其中：
 
-| 量 | 先这样理解 |
+| 量 | 含义 |
 |---|---|
 | `nq` | 广义位置数组长度 |
 | `nv` | 广义速度数组长度 |
-| `nu` | 控制输入维度，通常与执行器数量有关 |
+| `nu` | 控制输入维度 |
 | `qpos` | 当前广义位置 |
 | `qvel` | 当前广义速度 |
 | `ctrl` | 当前执行器控制输入 |
 
-不要在没确认索引含义之前直接假设 `qpos[0]` 就是第一个腿关节。
+使用这些数组前，需要先确认模型中各关节与索引的对应关系。
 
----
+## joint 与 actuator
 
-## 5. joint 与 actuator 不是一回事
+`joint` 描述机械结构允许怎样运动，`actuator` 描述控制输入怎样作用到模型。
 
-`joint` 描述机械结构允许怎样运动；`actuator` 描述控制输入怎样作用到模型上。
-
-只有 joint 并不意味着 `data.ctrl` 中自动出现一个控制量。需要在 `actuator` 中定义执行器。
-
-本次任务要求使用**力矩模式**。在 MuJoCo 中，最直接的基础形式可以使用 `motor` actuator，例如：
+例如：
 
 ```xml
 <actuator>
@@ -281,126 +260,117 @@ print("ctrl =", data.ctrl)
 </actuator>
 ```
 
-对于这种简单设置，可以把 `data.ctrl[i]` 理解为作用到对应自由度上的直接驱动力/力矩控制输入；`gear` 等参数会影响控制量到广义力的映射。
+这里定义了一个作用于 `hip` 关节的 motor actuator。
 
-因此：
+对于这种设置，`data.ctrl[i]` 是对应 actuator 的控制输入。实际产生的广义力还会受到 `gear` 等参数影响。
+
+第二次任务要求关节使用力矩模式。零控制量可以写：
 
 ```python
 data.ctrl[:] = 0.0
 ```
 
-表示不给这些 actuator 主动输出控制力矩。
+这表示 actuator 不主动输出控制力矩。机器人仍然受到重力和接触力，因此零力矩状态下依然可能下落、倒下或滑动。
 
-**零力矩不等于“强制保持姿势不动”。** 在重力和接触作用下，如果初始姿态没有支撑好，机器人仍然可能落下、趴倒或滑动。这一点对任务非常重要。
+## URDF 到 MJCF
 
----
+第二次任务要求从 URDF 自行转换得到 MJCF，并在 MJCF 中继续配置场景和执行器。
 
-## 6. URDF 与 MJCF：任务要求和软件能力分开理解
+当前 MuJoCo 本身可以解析 URDF，但 URDF 能表达的内容少于完整 MJCF。任务中仍按原要求完成转换。
 
-人工任务单要求：从 URDF 出发，**自行转换为 MJCF**，再在 MuJoCo 中完成场景与控制设置。这个要求保持不变。
-
-同时需要知道一个技术事实：当前 MuJoCo 本身也支持解析 URDF；官方文档甚至提供了 URDF 扩展。但 URDF 只能表达 MuJoCo 模型能力的一个子集，场景、执行器、MuJoCo 特有参数等通常仍需要在 MJCF 中继续整理。
-
-因此这次任务采用：
+建议按下面的顺序处理：
 
 ```text
-已有 URDF
-   ↓
-检查 mesh 与关节结构
-   ↓
-转换 / 保存为 MJCF
-   ↓
-在 MJCF 中补场景、执行器、初始状态等
-   ↓
-Python 加载并运行
+URDF
+  ↓
+检查 link、joint、mesh
+  ↓
+转换为 MJCF
+  ↓
+检查转换结果
+  ↓
+加入 actuator、场景和初始状态
+  ↓
+Python 加载
 ```
 
-这不是因为“MuJoCo 完全不能打开 URDF”，而是因为最终目标是得到一份可以继续修改、适合后续仿真的 MJCF。
+转换后先检查：
 
-### 转换后先检查什么
+- mesh 路径；
+- body / link 是否完整；
+- joint 名称和轴方向；
+- joint range；
+- base 是否具有自由基座；
+- 质量和惯量；
+- Viewer 中的姿态是否正常。
 
-不要转换完就立刻写控制程序。先确认：
+模型结构确认以后再开始写控制代码。
 
-- mesh 文件路径是否还能找到；
-- 机器人各 link/body 是否都存在；
-- 关节名字、轴方向和范围是否合理；
-- base 是否需要自由基座；
-- 质量与惯量有没有明显异常；
-- 模型是否在 Viewer 中以正确姿态显示。
+## mesh 路径
 
-如果模型本身就加载不正确，后面改 Python 控制代码没有意义。
+机器人模型通常会引用 STL 等 mesh 文件。转换以后目录结构可能发生变化，因此需要重新确认相对路径。
 
----
-
-## 7. mesh 路径是最常见的模型问题之一
-
-机器人模型通常引用 STL 等 mesh。路径可能来自原 URDF 的目录结构，转换后如果 XML 与 mesh 的相对位置改变，就会出现找不到资源的错误。
-
-MJCF 可以通过 `compiler` 指定 mesh 目录，例如：
+MJCF 可以指定 mesh 目录：
 
 ```xml
 <compiler meshdir="meshes"/>
 ```
 
-或者在 `<mesh file="..."/>` 中使用正确的相对路径。
+也可以在具体 mesh 中写相对路径：
 
-排查时不要只看 XML 中“写了什么”，还要从主 MJCF 文件所在位置计算实际相对路径。
+```xml
+<mesh file="..."/>
+```
 
-可以先在 Shell 中：
+排查路径时可以先检查当前目录和实际文件：
 
 ```bash
 pwd
 find . -maxdepth 3 -type f | head
 ```
 
-确认文件真实存在。
+相对路径从主 MJCF 所在位置计算。
 
----
+## 场景与机器人模型
 
-## 8. 场景与机器人模型最好分开
-
-任务要求加入平坦地面。长期看，不建议把“机器人本体”和“这个实验使用的世界”完全揉成一个文件。
-
-可以理解成：
+机器人本体和仿真场景可以分别保存。例如：
 
 ```text
-robot.xml   -> 机器人本体
-scene.xml   -> 地面、灯光、机器人放在哪
+robot.xml
+scene.xml
 ```
 
-MJCF 可以通过 `<include>` 或更现代的模型组合机制复用模型。初学阶段不必把组合系统做得很复杂，但至少要知道：
+`robot.xml` 保存机器人结构，`scene.xml` 保存地面、灯光和机器人在世界中的放置方式。
 
-> 地形是场景的一部分，不是机器狗身体的一部分。
+MJCF 可以通过 `<include>` 等方式组合模型。
 
-最简单的平面通常类似：
+平面地面可以写：
 
 ```xml
 <geom name="floor" type="plane" size="5 5 0.1"/>
 ```
 
-但机器狗“放在地面上”还涉及基座高度与各关节初始角度。
+机器人放到地面上时，还需要设置合适的 base 高度和关节初始角度。
 
----
+## 初始姿态和零力矩
 
-## 9. “静止趴在地面上”真正需要你决定什么
+任务要求机器人在平坦地面上静止趴着，并且关节输出力矩为 0。
 
-人工任务的完成条件是让机器狗在平坦场景中静止趴着，并要求关节输出力矩为 0。
+需要同时处理：
 
-这里至少有三个独立问题。
+### base 初始位姿
 
-### 初始基座位姿
+base 太高时会先下落，太低时可能与地面严重穿透。
 
-如果 base 初始位置太高，零力矩时它一定先落下；太低则可能一开始就与地面严重穿透。
+### 关节初始角
 
-### 初始关节角
+`data.ctrl[:] = 0` 不会改变初始关节角。趴卧姿态需要通过模型默认状态、keyframe 或 Python 中的 `qpos` 设置。
 
-`data.ctrl[:] = 0` 不会自动把腿摆成趴下姿势。关节初始角要来自你的模型结构和目标姿态。
+### 接触稳定性
 
-### 接触后是否稳定
+初始几何重叠、惯量异常、摩擦参数不合适都可能导致抖动或滑动。
 
-即使初始看起来是趴着，接触几何重叠、惯量异常或者摩擦设置不合适，也可能导致抖动或滑动。
-
-因此“静止”不要只理解为截图看着差不多。运行一段时间后观察：
+可以运行一段时间后观察：
 
 ```python
 print(data.time)
@@ -408,37 +378,29 @@ print(data.qpos)
 print(data.qvel)
 ```
 
-如果速度持续很大，说明它实际上没有稳定下来。
+如果 `qvel` 长时间保持较大数值，机器人仍在运动。
 
-任务没有要求你写一个通用判定器，但验收时应能解释自己怎样判断它已经稳定。
+## 设置初始状态
 
----
-
-## 10. 初始状态放在哪里
-
-模型默认状态可以写进 MJCF，也可以在 Python 创建 `MjData` 后修改。
-
-例如程序结构可以是：
+创建 `MjData` 后可以修改 `qpos`：
 
 ```python
 model = mujoco.MjModel.from_xml_path("scene.xml")
 data = mujoco.MjData(model)
 
-# TODO: 根据自己模型的 qpos 结构设置初始基座和关节姿态
+# 根据自己的模型设置初始姿态
 # data.qpos[...] = ...
 
 mujoco.mj_forward(model, data)
 ```
 
-`mj_forward()` 在不推进时间的情况下，根据当前 `qpos`、`qvel` 等重新计算依赖状态。手工修改初始状态后调用它，便于在开始 stepping 前得到一致的几何和动力学量。
+`mj_forward()` 根据当前的 `qpos`、`qvel` 等重新计算依赖状态，但不推进时间。
 
-也可以在 MJCF 使用 keyframe 保存一组姿态。两种方式都可以，关键是你知道初始状态来自哪里，而不是在代码和 XML 中重复设置后忘记哪一个最终生效。
+也可以在 MJCF 中使用 keyframe 保存初始姿态。工程中应明确初始状态到底由 XML 还是 Python 设置，避免同一组状态在多处重复配置。
 
----
+## 仿真程序骨架
 
-## 11. 第二次任务的 Python 程序可以先按这个骨架思考
-
-下面不是可提交的完整答案，只把仿真程序的职责分开：
+下面只给出仿真循环的结构，模型路径、初始姿态和控制索引需要根据自己的机器狗补充。
 
 ```python
 import time
@@ -446,22 +408,18 @@ import time
 import mujoco
 import mujoco.viewer
 
-# 1. 加载你整理好的场景 / MJCF
 model = mujoco.MjModel.from_xml_path("...")
 data = mujoco.MjData(model)
 
-# 2. TODO: 设置自己机器人的初始姿态
+# 根据自己的 qpos 结构设置初始姿态
 
-# 3. 本任务要求零力矩
-# TODO: 确认 ctrl 的维度和执行器含义后设置
+# 根据 model.nu 和 actuator 定义设置 ctrl
 
 mujoco.mj_forward(model, data)
 
 with mujoco.viewer.launch_passive(model, data) as viewer:
     while viewer.is_running():
         start = time.time()
-
-        # 4. TODO: 如有需要，在这里维持 / 更新控制输入
 
         mujoco.mj_step(model, data)
         viewer.sync()
@@ -471,46 +429,32 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
             time.sleep(remain)
 ```
 
-真正需要你自己补的是：
+在自己的模型上需要确认：
 
-- 加载哪个文件；
-- 你的 `qpos` 各段分别对应什么；
-- 哪组关节角是合理的趴卧初始姿态；
-- 模型里有几个 actuator；
-- 怎样确认所有关节控制确实为零；
-- 运行后怎样判断姿态稳定。
+- 实际加载哪个 MJCF；
+- `qpos` 中 base 和各关节对应哪些索引；
+- 趴卧姿态的关节角；
+- `model.nu`；
+- actuator 和 `ctrl` 的对应关系；
+- 如何判断系统已经稳定。
 
-这些信息不能从一份通用讲义替你猜出来，因为它们取决于具体机器人模型。
+## 仿真步与控制周期
 
----
-
-## 12. 仿真步和控制周期不是同一个概念
-
-`mujoco.mj_step(model, data)` 每次推进一个物理时间步，步长来自：
+`mj_step(model, data)` 每次推进一个物理时间步。步长由 MJCF 中的 `timestep` 决定：
 
 ```xml
 <option timestep="0.002"/>
 ```
 
-这表示一次物理步对应 0.002 s，也就是 500 Hz 的仿真更新频率。
+这里表示 0.002 s，也就是 500 Hz 的物理步频率。
 
-以后控制器可能只在 50 Hz 更新一次，那么可以保持同一组控制量执行多次 `mj_step()`：
+控制器可以使用更低的频率。例如控制器 50 Hz 更新一次时，可以在两次控制计算之间执行多个 `mj_step()`。
 
-```text
-计算一次控制量
-    ↓
-物理 step 多次
-    ↓
-再次计算控制量
-```
+后面阅读强化学习部署代码时，经常会看到这种 control decimation。
 
-本次零力矩任务不需要复杂控制器，但现在区分这两个概念，后面做 RL policy decimation 时会直接用到。
+## 程序结构
 
----
-
-## 13. 怎样整理自己的程序，再阅读 `unitree_mujoco`
-
-人工任务要求在基础程序完成后阅读 `unitree_mujoco` 并改进自己的程序结构。在进入完整开源工程前，可以先把自己的单文件程序按职责拆开。例如：
+程序变长以后，可以把不同职责拆开：
 
 ```text
 mujoco_project/
@@ -526,13 +470,23 @@ mujoco_project/
 └── README.md
 ```
 
-这不是必须照抄的模板。它只是在提醒你：模型、场景、机器人状态接口、控制器和主循环是不同职责。几十行程序时放在一个文件里没有问题；功能继续增加以后再拆。
+目录不必完全照这个例子安排。拆分时可以按职责考虑：
 
-然后再读 `unitree_mujoco`。不要一上来从仓库第一行读到最后一行。
+- 模型文件；
+- 场景；
+- 状态读取；
+- 控制器；
+- 仿真循环。
 
-先找四件事。
+几十行的小程序可以继续放在一个文件中，功能增加后再拆分。
 
-### 模型从哪里进入程序
+## 阅读 unitree_mujoco
+
+完成基础程序以后，再阅读 `unitree_mujoco`。
+
+可以先定位四类代码。
+
+### 模型加载
 
 搜索：
 
@@ -543,7 +497,7 @@ from_xml_path
 scene
 ```
 
-### 仿真主循环在哪里
+### 仿真主循环
 
 搜索：
 
@@ -553,7 +507,7 @@ while
 viewer
 ```
 
-### 控制量在哪里写入
+### 控制输入
 
 搜索：
 
@@ -563,7 +517,7 @@ actuator
 motor
 ```
 
-### 状态在哪里读取
+### 状态读取
 
 搜索：
 
@@ -573,32 +527,29 @@ qvel
 sensor
 ```
 
-先画出：
+先确认：
 
 ```text
-初始化 -> 读取状态 -> 控制 -> step -> 显示 / 通信
+初始化 → 读取状态 → 计算控制 → mj_step → 显示 / 通信
 ```
 
-再去理解线程、通信类和工程封装。否则很容易只看到“项目用了很多类和线程”，却不知道它们围绕哪一条仿真链路工作。
+然后再看项目怎样拆分类、线程和通信模块。
 
-### 关于线程
+### 线程
 
-任务让你思考线程设计是否足够优秀，并不意味着“线程越多越好”。
+分析线程时可以记录：
 
-先问：
+- 哪些任务需要不同运行频率；
+- 哪些函数可能阻塞；
+- 哪些状态会被多个线程同时访问；
+- 是否需要互斥锁或其他同步机制；
+- 当前规模下是否可以保持单线程。
 
-- 哪些工作必须以不同频率运行；
-- 哪些操作会阻塞；
-- 多线程后共享的 `data`、控制量和状态由谁同步；
-- 单线程是否已经足够完成当前任务。
+线程数量由实际任务决定。
 
-能说清楚“为什么需要线程”比机械把 viewer、control、simulation 各拆一个线程更重要。
+## 常见问题
 
----
-
-## 14. 常见问题的排查顺序
-
-出现问题时，先打印少量关键量：
+调试时可以先打印：
 
 ```python
 print("time:", data.time)
@@ -608,7 +559,7 @@ print("qvel:", data.qvel)
 print("ctrl:", data.ctrl)
 ```
 
-数组很长时只看和当前问题相关的一小段。调试顺序最好是：先确认模型加载，再确认初始姿态，再确认执行器数量和索引，最后再看控制后的运动。
+数组很长时只查看当前关心的索引范围。
 
 ### import 失败
 
@@ -616,52 +567,55 @@ print("ctrl:", data.ctrl)
 ModuleNotFoundError: No module named 'mujoco'
 ```
 
-先确认：
+检查：
 
 ```bash
 which python3
 python3 -m pip show mujoco
 ```
 
-不要只凭“我刚刚 pip install 过”判断环境一致。
+确认安装 MuJoCo 和运行脚本使用的是同一个 Python 环境。
 
 ### XML 编译失败
 
-先读错误里指出的文件、元素和行号；再检查 XML 结构、属性名和引用路径。
+查看错误给出的文件、元素和行号，再检查 XML 结构、属性名称和引用路径。
 
 ### mesh 找不到
 
-检查主 XML 所在目录、`meshdir` 和实际 mesh 路径。
+检查：
 
-### 一开始就弹飞
+- 主 XML 所在目录；
+- `meshdir`；
+- `<mesh file="..."/>`；
+- 实际 mesh 文件位置。
 
-优先检查：
+### 仿真开始后弹飞
 
-- 初始碰撞几何是否严重重叠；
-- base 高度是否合理；
-- 质量与惯量是否异常；
-- 时间步是否过大；
-- 自己是否误写了很大的 `ctrl`。
+检查：
 
-### `ctrl` 写了但关节不动
+- 初始碰撞几何是否重叠；
+- base 高度；
+- 质量和惯量；
+- timestep；
+- `ctrl` 是否被误设为很大的值。
+
+### ctrl 写入后关节不动
 
 检查：
 
 - `model.nu` 是否大于 0；
-- actuator 是否真的绑定到目标 joint；
-- 控制索引是否对应正确 actuator；
-- 力矩量级、gear、限制是否合理；
-- 关节是否被锁死或已经顶到 limit。
+- actuator 是否绑定到目标 joint；
+- `ctrl` 索引是否正确；
+- `gear` 和控制范围；
+- joint 是否达到 limit。
 
 ### 零力矩后机器人倒下
 
-这不一定是 MuJoCo 错误。零力矩意味着不主动驱动关节，不意味着保持初始姿态。回到第 9 节检查初始姿态与接触是否能在重力下自然稳定。
+零力矩只表示 actuator 不主动输出力矩。机器人在重力作用下仍然会运动。检查初始姿态、base 高度和接触状态。
 
----
+## C++ 版本
 
-## 15. 选做 C++ 时，概念并不会变
-
-Python 与 C++ API 写法不同，但核心对象仍然是：
+Python 和 C++ 接口写法不同，模型、状态和控制的基本关系保持一致：
 
 ```text
 model
@@ -670,37 +624,27 @@ ctrl
 step
 ```
 
-因此选做 C++ 版本时，不要把任务理解成“重新学一遍 MuJoCo”。先让 Python 版本的模型、状态索引和控制关系完全清楚，再把同一条逻辑迁移到 C++。
+选做 C++ 版本时，可以先把 Python 版本中的模型路径、状态索引和 actuator 对应关系确认清楚，再迁移相同逻辑。
 
----
+## 完成第二次培训后
 
-## 16. 完成本阶段后应该能说明
+至少应当能够说明：
 
-验收时至少应能结合自己的模型回答：
+- `MjModel` 与 `MjData` 的区别；
+- `qpos`、`qvel`、`ctrl` 的含义；
+- 自由基座为什么会使 `nq != nv`；
+- joint 与 actuator 的区别；
+- motor actuator 的作用；
+- 零 `ctrl` 对应什么物理含义；
+- 自己怎样从 URDF 得到 MJCF；
+- mesh、场景和初始姿态分别在哪里配置；
+- 怎样判断机器人是否已经稳定；
+- `unitree_mujoco` 中模型加载、状态读取、控制和 stepping 分别位于哪里；
+- 引入线程时需要考虑哪些共享状态和同步问题。
 
-- `MjModel` 与 `MjData` 分别存什么；
-- `qpos`、`qvel`、`ctrl` 在自己的机器人中大致对应哪些量；
-- 为什么自由基座会让 `nq != nv`；
-- `joint` 和 `actuator` 的区别；
-- 本次为什么使用 motor actuator，以及零 `ctrl` 表示什么；
-- 为什么零力矩不保证机器人自动保持站立或趴卧；
-- 自己从 URDF 到 MJCF 做了哪些处理；
-- mesh 路径、平地场景和初始姿态分别在哪里定义；
-- 自己怎样确认机器人已经稳定；
-- `unitree_mujoco` 中模型加载、状态读取、控制和 stepping 分别在哪里；
-- 如果引入线程，具体是为了解决什么问题。
-
-能够在自己的代码和 XML 上指出这些内容，比背 MuJoCo API 名称更重要。
-
----
-
-## 17. 官方资料
-
-建议优先查官方文档：
+## 官方资料
 
 - Modeling / URDF：https://mujoco.readthedocs.io/en/latest/modeling.html
 - XML Reference：https://mujoco.readthedocs.io/en/latest/XMLreference.html
 - Python：https://mujoco.readthedocs.io/en/latest/python.html
 - Programming / Simulation：https://mujoco.readthedocs.io/en/latest/programming/simulation.html
-
-遇到模型字段或 actuator 属性不确定时，直接查 XML Reference，通常比搜索二手博客更可靠。
