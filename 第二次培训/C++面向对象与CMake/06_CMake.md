@@ -1,7 +1,5 @@
 # CMake
 
-## 7. CMake：把构建关系写成工程描述
-
 手动编译四个 `.cpp` 还能接受。等工程变成二十个、五十个文件，再自己维护命令很容易漏文件或写错依赖。
 
 CMake **不是编译器**。可以把流程理解为：
@@ -29,7 +27,7 @@ CMake 的重要作用，是把：
 
 写进可以维护的工程描述。
 
-### 7.1 最简单的可执行 target
+## 最简单的可执行 target
 
 ```cmake
 cmake_minimum_required(VERSION 3.16)
@@ -50,7 +48,7 @@ target_include_directories(robot_demo PRIVATE include)
 
 `add_executable` 定义一个可执行 target。`target_include_directories` 给这个 target 增加头文件搜索目录。
 
-### 7.2 为什么还会有 library target
+## 为什么还会有 library target
 
 如果核心机器人代码以后不仅被一个 demo 使用，而是还要被测试程序、ROS 2 节点或其他工具复用，更自然的结构是：
 
@@ -77,7 +75,7 @@ target_link_libraries(robot_demo PRIVATE robot_core)
 
 现在不必背一整套 CMake 关键字。先抓住 target：**先问“我要构建什么”，再问“这个 target 需要哪些源文件和依赖”。**
 
-### 7.3 out-of-source build
+## out-of-source build
 
 推荐：
 
@@ -91,13 +89,11 @@ cmake --build build
 
 ---
 
-## 8. 动手：完成 mini_robot 多文件工程
+## 动手：完成 mini_robot 多文件工程
 
 仓库中提供：
 
-```text
-第二次培训/C++面向对象与CMake/starter/05_cmake/
-```
+- [starter/05_cmake](./starter/05_cmake/)
 
 这一次不再要求从空目录猜最终工程应该长什么样。目录、头文件接口和测试入口已经提供，你需要补齐实现与构建描述。
 
