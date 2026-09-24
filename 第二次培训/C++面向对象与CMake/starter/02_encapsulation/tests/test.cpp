@@ -53,30 +53,36 @@ struct has_public_position<T, std::void_t<decltype(std::declval<T&>().position)>
 int main()
 {
     Motor motor(9);
+    const Motor& const_motor = motor;
 
-    check(close(motor.getPosition(), 0.0), "initial position is 0.0");
+    check(close(const_motor.getPosition(), 0.0),
+          "getPosition works on const Motor");
+    check(!std::is_convertible<int, Motor>::value,
+          "single-argument constructor is explicit");
     check(!has_public_id<Motor>::value, "id is not publicly writable");
     check(!has_public_position<Motor>::value, "position is not publicly writable");
 
     check(motor.setPosition(3.14), "upper boundary is accepted");
-    check(close(motor.getPosition(), 3.14), "upper boundary is stored");
+    check(close(const_motor.getPosition(), 3.14), "upper boundary is stored");
 
     check(!motor.setPosition(3.1401), "value above upper boundary is rejected");
-    check(close(motor.getPosition(), 3.14), "rejected value keeps old position");
+    check(close(const_motor.getPosition(), 3.14),
+          "rejected value keeps old position");
 
     check(motor.setPosition(-3.14), "lower boundary is accepted");
-    check(close(motor.getPosition(), -3.14), "lower boundary is stored");
+    check(close(const_motor.getPosition(), -3.14), "lower boundary is stored");
 
     check(!motor.setPosition(-3.1401), "value below lower boundary is rejected");
-    check(close(motor.getPosition(), -3.14), "second rejected value keeps old position");
+    check(close(const_motor.getPosition(), -3.14),
+          "second rejected value keeps old position");
 
     std::ostringstream output;
     auto* old_buffer = std::cout.rdbuf(output.rdbuf());
-    motor.printStatus();
+    const_motor.printStatus();
     std::cout.rdbuf(old_buffer);
 
     check(output.str() == "Motor 9 position: -3.14 rad\n",
-          "printStatus uses the stored value");
+          "printStatus works on const Motor");
 
     std::cout << passed << " / " << total << " tests passed" << std::endl;
     return passed == total ? 0 : 1;
