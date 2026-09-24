@@ -218,7 +218,7 @@ print("hello")
 python3 demo.py
 ```
 
-这时 `demo.py` 只需要能够被 Python 读取，本身不要求具有执行权限。
+这时 `demo.py` 只需要能够被 Python 读取，不要求具有执行权限。
 
 ### 直接执行脚本
 
