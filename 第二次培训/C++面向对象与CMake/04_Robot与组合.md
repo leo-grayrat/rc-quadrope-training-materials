@@ -145,3 +145,22 @@ private:
 </details>
 
 到这里，程序已经有多个类。下一节开始把这些类拆到不同文件中。
+
+## 本地自测
+
+完成 `Robot` 后，在 `starter/04_robot/` 中运行：
+
+```bash
+bash test.sh
+```
+
+测试程序另外定义了一种只用于检查调用行为的 `TestMotor`，然后把两台 `TestMotor` 交给 `Robot`。
+
+它会检查：
+
+- `initialize()` 是否分别调用左右电机一次 `enable()`；
+- `move(-0.80)` 是否分别调用左右电机一次 `setPosition()`；
+- 左右电机状态是否保持独立；
+- `printStatus()` 是否读取两台电机各自的当前位置。
+
+因此这组测试不依赖 DM 或 Unitree 的具体实现。
