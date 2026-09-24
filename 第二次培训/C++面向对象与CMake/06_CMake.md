@@ -218,7 +218,7 @@ bash test.sh
 脚本依次检查：
 
 1. `cmake -S . -B ...` 能否完成配置；
-2. CMake 能否成功构建 `robot_demo`；
+2. 是否存在并能构建 `robot_core`、`robot_demo` 两个 target；
 3. `robot_demo` 的完整输出；
 4. `DMMotor`、`UnitreeMotor` 的状态保存和输出；
 5. `Robot` 是否通过 `Motor&` 正确调用左右两台电机。
