@@ -31,11 +31,67 @@ Robot
 
 如果写：
 
-起始代码已经单独放在：
+```cpp
+class Robot {
+private:
+    DMMotor left_motor_;
+    DMMotor right_motor_;
+};
+```
+
+那么这个 `Robot` 从类型上已经绑定 DM 电机。以后右腿想换 Unitree，就必须修改 `Robot`。
+
+如果 `Robot` 只依赖 `Motor` 接口：
+
+```cpp
+class Robot {
+private:
+    Motor& left_motor_;
+    Motor& right_motor_;
+};
+```
+
+那么左右两边可以是任何满足接口的实现。
+
+### 5.2 引用成员与生命周期
+
+引用成员必须在构造时绑定，因此构造函数需要初始化列表：
+
+```cpp
+Robot(Motor& left_motor, Motor& right_motor)
+    : left_motor_(left_motor),
+      right_motor_(right_motor)
+{
+}
+```
+
+这里的 `Robot` **不拥有**这两台电机，它只是引用外部已经存在的对象。因此必须保证：
+
+> `Robot` 使用这些引用期间，被引用的电机对象仍然存在。
+
+下面的顺序是安全的：
+
+```cpp
+DMMotor left(1);
+UnitreeMotor right(2);
+Robot robot(left, right);
+```
+
+因为 `robot` 会先析构，然后才轮到在它之前创建的 `right` 和 `left`。
+
+在更复杂项目中，“谁拥有对象、谁只借用对象、对象活多久”会成为很重要的问题。本文暂时不引入 `std::unique_ptr` / `std::shared_ptr`，但至少要知道引用并不会自动延长对象生命周期。
+
+### 5.3 第四次动手：实现 Robot
+
+假设前一节的 `Motor`、`DMMotor`、`UnitreeMotor` 已经写好。
+
+补全下面的 `Robot`：
+
+起始代码放在：
 
 - [starter/04_robot/main.cpp](./starter/04_robot/main.cpp)
 
-前一节的电机接口与两种电机实现已经给好，只补 `Robot`。
+前一节的电机接口与两种具体电机已经给定，这次只补 `Robot` 中的 TODO。
 
 测试代码：
 
