@@ -29,7 +29,7 @@ private:
 };
 ```
 
-那么 `Robot` 的定义已经和 `DMMotor` 绑定。以后如果一侧改用 Unitree 电机，`Robot` 本身也要修改。
+这样 `Robot` 的定义就和 `DMMotor` 绑定。以后如果一侧改用 Unitree 电机，`Robot` 也要修改。
 
 改成保存 `Motor` 引用：
 
