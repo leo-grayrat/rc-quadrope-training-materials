@@ -14,12 +14,18 @@ fi
 echo "[PASS] CMake configure"
 
 echo
-echo "== CMake build =="
-if ! cmake --build "$BUILD"; then
-    echo "[FAIL] CMake build"
+echo "== CMake targets =="
+if ! cmake --build "$BUILD" --target robot_core; then
+    echo "[FAIL] robot_core target"
     exit 1
 fi
-echo "[PASS] CMake build"
+echo "[PASS] robot_core target"
+
+if ! cmake --build "$BUILD" --target robot_demo; then
+    echo "[FAIL] robot_demo target"
+    exit 1
+fi
+echo "[PASS] robot_demo target"
 
 EXPECTED='=== Mini Robot Demo ===
 Robot initialization...
