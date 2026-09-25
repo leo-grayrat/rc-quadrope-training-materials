@@ -5,8 +5,8 @@
 ## 学习顺序
 
 1. [Python 基础](./01_Python基础.md)
-2. [入门与最小仿真](./02_入门与最小仿真.md)
-3. [MJCF 与机器人模型](./03_MJCF与机器人模型.md)
+2. [MuJoCo 与 MJCF 模型](./02_MuJoCo与MJCF模型.md)
+3. [入门与最小仿真](./03_入门与最小仿真.md)
 4. [状态、执行器与控制](./04_状态执行器与控制.md)
 5. [机器狗任务实现](./05_机器狗任务实现.md)
 6. [工程组织与 unitree_mujoco](./06_工程组织与unitree_mujoco.md)
@@ -15,11 +15,14 @@
 学习过程使用两个小模型逐步过渡：
 
 ```text
-falling box
-自由刚体、MjModel、MjData、mj_step、Viewer
+falling box / single joint
+先看懂 MJCF、body、joint、geom、freejoint
         ↓
-single joint
-body、hinge、qpos、qvel、actuator、ctrl
+Python 加载与运行
+MjModel、MjData、qpos、qvel、mj_step、Viewer
+        ↓
+single joint + motor
+actuator、ctrl
         ↓
 完整四足机器人
 free base + 12 个关节 + 12 个执行器
