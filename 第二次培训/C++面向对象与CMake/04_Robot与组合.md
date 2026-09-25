@@ -98,11 +98,9 @@ Right motor position: 1.50 rad
 
 <details>
 <summary>参考实现</summary>
-
-```cpp
-class Robot {
+<pre><code class="language-cpp">class Robot {
 public:
-    Robot(Motor& left_motor, Motor& right_motor)
+    Robot(Motor&amp; left_motor, Motor&amp; right_motor)
         : left_motor_(left_motor),
           right_motor_(right_motor)
     {
@@ -110,16 +108,16 @@ public:
 
     void initialize()
     {
-        std::cout << "Robot initialization..." << std::endl;
+        std::cout &lt;&lt; "Robot initialization..." &lt;&lt; std::endl;
         left_motor_.enable();
         right_motor_.enable();
     }
 
     void move(double position)
     {
-        std::cout << "Set robot target position: "
-                  << std::fixed << std::setprecision(2)
-                  << position << " rad" << std::endl;
+        std::cout &lt;&lt; "Set robot target position: "
+                  &lt;&lt; std::fixed &lt;&lt; std::setprecision(2)
+                  &lt;&lt; position &lt;&lt; " rad" &lt;&lt; std::endl;
 
         left_motor_.setPosition(position);
         right_motor_.setPosition(position);
@@ -127,21 +125,19 @@ public:
 
     void printStatus() const
     {
-        std::cout << "Left motor position: "
-                  << std::fixed << std::setprecision(2)
-                  << left_motor_.getPosition() << " rad" << std::endl;
+        std::cout &lt;&lt; "Left motor position: "
+                  &lt;&lt; std::fixed &lt;&lt; std::setprecision(2)
+                  &lt;&lt; left_motor_.getPosition() &lt;&lt; " rad" &lt;&lt; std::endl;
 
-        std::cout << "Right motor position: "
-                  << std::fixed << std::setprecision(2)
-                  << right_motor_.getPosition() << " rad" << std::endl;
+        std::cout &lt;&lt; "Right motor position: "
+                  &lt;&lt; std::fixed &lt;&lt; std::setprecision(2)
+                  &lt;&lt; right_motor_.getPosition() &lt;&lt; " rad" &lt;&lt; std::endl;
     }
 
 private:
-    Motor& left_motor_;
-    Motor& right_motor_;
-};
-```
-
+    Motor&amp; left_motor_;
+    Motor&amp; right_motor_;
+};</code></pre>
 </details>
 
 到这里，程序已经有多个类。下一节开始把这些类拆到不同文件中。
