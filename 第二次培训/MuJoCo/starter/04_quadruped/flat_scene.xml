@@ -1,0 +1,15 @@
+<mujoco model="flat_scene">
+    <!-- TODO: 改成自己机器人 MJCF 的相对路径 -->
+    <include file="../models/robot.xml"/>
+
+    <worldbody>
+        <light pos="0 0 3"/>
+
+        <geom
+            name="floor"
+            type="plane"
+            size="5 5 0.1"
+            rgba="0.8 0.8 0.8 1"
+        />
+    </worldbody>
+</mujoco>
