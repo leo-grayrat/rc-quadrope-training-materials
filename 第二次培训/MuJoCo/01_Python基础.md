@@ -29,6 +29,29 @@ print(math.sqrt(9))
 
 这里的 `math.sqrt` 表示模块 `math` 中的 `sqrt` 函数。后面看到 `mujoco.mj_step`、`mujoco.MjData` 时，点号也是同样的访问方式。
 
+## 定义一个函数
+
+Python 用 `def` 定义函数：
+
+```python
+def square(x):
+    return x * x
+```
+
+调用：
+
+```python
+print(square(3))
+```
+
+输出：
+
+```text
+9
+```
+
+函数体同样依靠缩进表示范围。后面把一个很长的仿真程序拆到多个文件时，会把一部分操作整理成函数。
+
 ## 对象和成员
 
 C++ 中可以写：
