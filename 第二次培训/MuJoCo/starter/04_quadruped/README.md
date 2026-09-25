@@ -2,6 +2,12 @@
 
 这里不提供机器狗 MJCF，也不提供关节初始角。
 
+目录中的三个文件分别用于：
+
+- `flat_scene.xml`：平地场景模板，需要修改机器人 MJCF 的相对路径；
+- `model_info.py`：列出模型维度、joint 和 actuator；
+- `simulate.py`：设置初始姿态并以零控制输入运行仿真。
+
 先把自己转换和整理后的模型放到合适目录，然后：
 
 ```bash
@@ -15,6 +21,8 @@ python3 model_info.py path/to/robot.xml
 - 各关节名称与 `qpos` 地址；
 - actuator 数量；
 - actuator 对应的关节。
+
+复制或调整 `flat_scene.xml`，确保其中的 `include` 指向自己的机器人 MJCF。
 
 随后在 `simulate.py` 中填写：
 
