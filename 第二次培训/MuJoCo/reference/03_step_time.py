@@ -1,11 +1,9 @@
-from pathlib import Path
-
 import mujoco
 
 
-scene = Path(__file__).resolve().parent.parent / "starter/01_falling_box/scene.xml"
-
-model = mujoco.MjModel.from_xml_path(str(scene))
+model = mujoco.MjModel.from_xml_path(
+    "starter/01_falling_box/scene.xml"
+)
 data = mujoco.MjData(model)
 
 print(data.time)
