@@ -1,6 +1,9 @@
 # falling box
 
-对应 [入门与最小仿真](../../02_入门与最小仿真.md) 中的第一个完整示例。
+对应 [MuJoCo 与 MJCF 模型](../../02_MuJoCo与MJCF模型.md) 和 [入门与最小仿真](../../03_入门与最小仿真.md)。
+
+- `scene.xml`：地面 + 一个带 free joint 的自由方块；
+- `simulate.py`：加载该模型并持续调用 `mj_step()`，同时用 Viewer 显示。
 
 运行：
 
