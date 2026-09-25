@@ -38,6 +38,8 @@ def square(x):
     return x * x
 ```
 
+`x` 是函数参数，`return` 把计算结果交给调用者。
+
 调用：
 
 ```python
@@ -67,15 +69,14 @@ motor.position
 motor.get_position()
 ```
 
-因此后面的：
+先记住这种读法即可：
 
-```python
-model.nq
-data.qpos
-viewer.sync()
+```text
+对象.成员
+对象.函数(...)
 ```
 
-都可以先按“对象.成员”或“对象.函数”来读。具体成员表示什么，由 MuJoCo 再规定。
+后面真正遇到 MuJoCo 对象时，再介绍那些对象具体有哪些成员和函数。
 
 ## 列表、下标和切片
 
