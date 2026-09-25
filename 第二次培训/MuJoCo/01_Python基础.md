@@ -88,6 +88,39 @@ print(numbers[:])
 
 后面 MuJoCo 的 `qpos`、`qvel`、`ctrl` 都会用到类似写法。
 
+## 字典
+
+后面给机器狗设置初始关节角时，需要把“关节名”和“角度”一一对应。Python 可以用字典保存这种关系：
+
+```python
+joint_positions = {
+    "hip": 0.2,
+    "thigh": 0.8,
+    "calf": -1.4,
+}
+```
+
+读取一个值：
+
+```python
+print(joint_positions["hip"])
+```
+
+遍历名称和值：
+
+```python
+for name, position in joint_positions.items():
+    print(name, position)
+```
+
+输出：
+
+```text
+hip 0.2
+thigh 0.8
+calf -1.4
+```
+
 ## 判断和循环
 
 Python 用缩进表示代码块：
