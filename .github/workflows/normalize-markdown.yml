@@ -2,10 +2,7 @@ name: Normalize Markdown
 
 on:
   push:
-    paths:
-      - '**/*.md'
-      - '**/*.markdown'
-      - '.github/workflows/normalize-markdown.yml'
+    paths: ['**/*.md', '**/*.markdown']
 
 permissions:
   contents: write
@@ -13,9 +10,3 @@ permissions:
 jobs:
   normalize:
     uses: leo-grayrat/markdown-github-normalizer/.github/workflows/normalize.yml@main
-    with:
-      mode: replace
-      files: |
-        第三次培训/01_关节电机与关节控制.md
-        第三次培训/02_减速器编码器与关节坐标.md
-        第三次培训/03_第三次任务实现.md
