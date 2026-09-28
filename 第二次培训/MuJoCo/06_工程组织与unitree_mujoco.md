@@ -1,25 +1,22 @@
 # 工程组织与 unitree_mujoco
 
-前面的机器狗程序已经能运行。人工任务还要求继续阅读 `unitree_mujoco`，考虑程序结构和线程设计。
+机器狗程序跑通以后，代码开始同时承担几类不同工作：模型与场景配置、初始状态、物理推进、画面刷新，以及以后会加入的控制和通信。`unitree_mujoco` 正好是一份可以对照的真实工程：它把这些工作拆开，并让仿真和显示以不同频率运行。
 
-这一部分先把 Python 多文件和多线程真正写一遍，再去读开源项目。否则“模块”“仿真线程”“通信线程”只会停留在名词上。
+这一部分先把多文件和并发运行连成一个完整问题，再去追 `unitree_mujoco` 的真实数据流。
 
-## 1. 从自己的单文件程序开始拆
+## 从一个能运行的脚本到多个并发职责
 
-机器狗程序最开始完全可以都写在 `simulate.py` 中：
+最开始的四足仿真完全可以只有一个文件：
 
 ```text
-加载模型
-设置初始 qpos
-创建 Viewer
-写 ctrl
-mj_step
-显示
+加载场景
+→ 设置初始 qpos
+→ 写 ctrl
+→ mj_step
+→ viewer.sync
 ```
 
-程序继续增长以后，可以把不同职责拆开。
-
-先看三个文件的最小结构：
+随着程序增长，先按已有职责拆文件。例如：
 
 ```text
 quadruped_sim/
@@ -28,9 +25,7 @@ quadruped_sim/
 └── main.py
 ```
 
-### robot.py：处理机器人状态
-
-把“根据 joint 名称设置初始角”单独写成函数：
+`robot.py` 可以保存与机器人状态直接相关的函数：
 
 ```python
 import mujoco
@@ -46,15 +41,7 @@ def set_joint_position(model, data, name, position):
     data.qpos[qpos_adr] = position
 ```
 
-这里没有新的 MuJoCo API，只是把上一章反复执行的三步放进函数。
-
-以后可以继续在这个文件中加入：
-
-- 设置整组初始关节角；
-- 根据名字读取关节状态；
-- 保存机器人 joint 名称。
-
-### simulator.py：负责推进仿真
+`simulator.py` 负责仿真循环：
 
 ```python
 import mujoco
@@ -68,9 +55,7 @@ def run(model, data):
             viewer.sync()
 ```
 
-这个文件集中负责“仿真怎样运行”。
-
-### main.py：把各部分组合起来
+`main.py` 只负责组合：
 
 ```python
 import mujoco
@@ -89,89 +74,40 @@ data.ctrl[:] = 0.0
 run(model, data)
 ```
 
-这里的 `FL_hip_joint` 只是示例，实际名称使用自己的模型。
+拆文件没有改变数据关系：`model` 和 `data` 仍然在入口中创建，再通过函数参数传给其它模块。程序只是把不同职责从一个文件中分开。
 
-现在多文件之间的关系很明确：
+### 当仿真和显示不再使用同一个循环
+
+MuJoCo 的物理步长可能是：
 
 ```text
-main.py
-├── 调用 robot.py 处理机器人状态
-└── 调用 simulator.py 运行 MuJoCo
+0.005 s
 ```
 
-`import` 以后，函数仍然通过参数接收 `model`、`data`。它们没有因为拆文件就自动变成“全局共享对象”。
+也就是 200 Hz；画面刷新没有必要达到 200 Hz，例如 50 Hz 已经足够流畅。于是程序开始出现两个长期运行的任务：
 
-### 练习：先只拆文件
+```text
+物理仿真：200 Hz
+显示刷新： 50 Hz
+```
 
-把已经跑通的机器狗程序拆成至少两个 Python 文件。
-
-拆分前后要求保持：
-
-- 加载同一份场景；
-- 初始姿态相同；
-- `data.ctrl[:] = 0.0`；
-- Viewer 中运行结果相同。
-
-这一步只改变代码组织，不增加线程。
-
-## 2. Python 线程最基本怎么写
-
-Python 标准库中的 `threading` 可以启动线程。
-
-先看一个完全独立于 MuJoCo 的最小程序：
+Python 可以用 `Thread` 让两个函数分别运行：
 
 ```python
 from threading import Thread
 
+sim_thread = Thread(target=simulation_loop)
+viewer_thread = Thread(target=viewer_loop)
 
-def worker():
-    print("worker finished")
-
-
-thread = Thread(target=worker)
-thread.start()
-thread.join()
-
-print("main finished")
+sim_thread.start()
+viewer_thread.start()
 ```
 
-关键有三步。
+`target` 需要传函数本身，因此这里写 `simulation_loop`，没有括号。
 
-创建线程：
+长期运行的线程还需要一个明确的停止信号。标准库中的 `Event` 可以承担这个职责：
 
 ```python
-thread = Thread(target=worker)
-```
-
-`target=worker` 表示线程启动后执行 `worker` 函数。这里传的是函数本身，所以没有写 `worker()`。
-
-启动：
-
-```python
-thread.start()
-```
-
-等待线程结束：
-
-```python
-thread.join()
-```
-
-因为主线程在 `join()` 后才继续，所以最后一定会看到：
-
-```text
-worker finished
-main finished
-```
-
-## 3. 一个持续运行的线程怎样停下来
-
-仿真、通信、日志线程往往不是执行一次就结束，而是持续循环。
-
-可以用 `Event` 给线程一个停止信号：
-
-```python
-import time
 from threading import Event, Thread
 
 stop_event = Event()
@@ -179,223 +115,170 @@ stop_event = Event()
 
 def worker():
     while not stop_event.is_set():
-        print("working")
-        time.sleep(0.1)
-```
+        ...
 
-启动：
-
-```python
 thread = Thread(target=worker)
 thread.start()
-```
 
-需要停止时：
-
-```python
+# 需要结束时
 stop_event.set()
 thread.join()
 ```
 
-`set()` 改变 Event 的状态，工作线程下一次检查 `is_set()` 时退出循环；`join()` 再等待它真正结束。
+`set()` 发出停止信号，`join()` 等待线程真正退出。
 
-这个写法比直接强行结束线程更容易管理清理过程。
+### 两个线程访问同一份 MuJoCo 状态
 
-## 4. 两个线程碰同一份数据时要考虑同步
-
-假设一个线程正在执行：
+如果一个线程正在：
 
 ```python
 mujoco.mj_step(model, data)
 ```
 
-另一个线程同时执行：
+另一个线程同时：
 
 ```python
 viewer.sync()
 ```
 
-两边都在使用同一份 `data`。如果某段操作要求数据在执行过程中保持一致，就需要控制谁可以同时进入这段代码。
-
-Python 可以使用 `Lock`：
+它们会碰到同一份仿真状态。需要保证一段操作执行期间不被另一个线程同时进入时，可以用同一把 `Lock`：
 
 ```python
-import threading
+from threading import Lock
 
-lock = threading.Lock()
-```
+lock = Lock()
 
-进入临界区：
-
-```python
 with lock:
     mujoco.mj_step(model, data)
 ```
 
-另一个线程也使用同一把锁：
+显示线程也使用同一个 `lock`：
 
 ```python
 with lock:
     viewer.sync()
 ```
 
-同一时刻只能有一个线程持有这把锁。
+同一时刻只能有一个线程进入这两个临界区。
 
-因此可以形成：
-
-```text
-SimulationThread
-    ↓
-拿 lock
-    ↓
-mj_step(model, data)
-    ↓
-释放 lock
-
-PhysicsViewerThread
-    ↓
-拿同一把 lock
-    ↓
-viewer.sync()
-    ↓
-释放 lock
-```
-
-`with lock:` 会在代码块结束时自动释放锁。也可以手工调用 `acquire()` 和 `release()`，但必须保证所有路径都能释放，否则其它线程可能一直等待。
-
-## 5. 线程之间传数据：Queue
-
-另一个常见需求是：仿真线程产生状态，日志或通信线程读取这些状态。
-
-这时不一定要让两个线程都直接操作 `MjData`。可以传一份状态副本。
-
-Python 标准库提供线程安全的队列：
+另一类情况是“一个线程产生数据，另一个线程消费数据”。例如日志线程只需要读取某一时刻的关节状态，没有必要直接共享 `MjData`。可以通过线程安全队列传一份状态快照：
 
 ```python
 from queue import Queue
 
 state_queue = Queue()
-```
 
-仿真线程中：
-
-```python
+# 仿真线程
 state_queue.put(data.qpos.copy())
-```
 
-这里使用 `.copy()`，放进队列的是当时的状态快照。后面 `data.qpos` 再变化，不会把已经放进队列的这份数组一起改掉。
-
-另一个线程读取：
-
-```python
+# 日志线程
 state = state_queue.get()
-print(state)
 ```
 
-所以一种更清楚的数据关系可以是：
+这里 `.copy()` 很重要：队列中保存的是当时的数组内容，后面 `data.qpos` 继续变化不会把已经送出的快照一起改掉。
+
+因此，`Thread`、`Event`、`Lock`、`Queue` 分别解决的是同一个并发程序中的不同问题：运行、停止、共享状态互斥，以及线程间传递数据。是否真的需要多线程取决于程序是否已经出现这些并发职责；一个简单的仿真循环保持单线程完全可以。
+
+## 源码追踪任务：自己走一遍 `unitree_mujoco`
+
+这次源码阅读固定到 Unitree 官方仓库的这个版本：
 
 ```text
-仿真线程
-  │
-  │ qpos.copy()
-  ↓
-Queue
-  ↓
-日志线程
+unitreerobotics/unitree_mujoco
+commit 1eb6642e3f3fdfb7fb13a9794fd6a2dd93ea0e7d
 ```
 
-实际程序如果仿真产生数据远快于日志消费，还要考虑降低发送频率或限制队列长度；这里先掌握线程间传递状态的基本方法。
-
-## 6. 为什么仿真和 Viewer 可能使用不同频率
-
-MuJoCo 的物理步长决定仿真更新频率。
-
-例如：
-
-```text
-timestep = 0.005 s
-```
-
-就是每秒 200 个物理步。
-
-Viewer 没必要每个物理步都刷新。如果：
-
-```text
-VIEWER_DT = 0.02 s
-```
-
-就是 50 Hz 显示。
-
-于是可以出现：
-
-```text
-仿真：200 Hz
-显示： 50 Hz
-```
-
-它们具有不同循环周期，这就是把两项工作分开的一个实际理由。
-
-控制、通信也可能有自己的更新频率。阅读项目时，看到多个循环或线程，需要继续找各自的时间间隔，而不是只记住“这里用了多线程”。
-
-## 7. 现在真正读 unitree_mujoco
-
-这里使用 Unitree 官方仓库：
-
-<https://github.com/unitreerobotics/unitree_mujoco>
-
-仓库同时有 C++ 和 Python 仿真器。当前学习 Python，重点看：
-
-```text
-simulate_python/
-├── config.py
-├── unitree_mujoco.py
-└── unitree_sdk2py_bridge.py
-```
-
-官方中文 README 中给出的 Python 启动方式是：
+可以直接：
 
 ```bash
-cd simulate_python
-python3 unitree_mujoco.py
+git clone https://github.com/unitreerobotics/unitree_mujoco.git
+cd unitree_mujoco
+git checkout 1eb6642e3f3fdfb7fb13a9794fd6a2dd93ea0e7d
 ```
 
-所以入口已经很明确：
+仓库中的 Python 仿真器位于 `simulate_python/`。正式读参考分析之前，先自己沿源码找出两条完整路径：
+
+```text
+低层电机命令
+→ 写入 MuJoCo 控制输入
+→ 物理推进
+
+MuJoCo 传感器状态
+→ 组装 LowState
+→ 发布出去
+```
+
+练习文件在：
+
+```text
+starter/03_unitree_trace/trace.json
+```
+
+其中固定了六个字段：
+
+```json
+{
+  "entry_file": "",
+  "config_file": "",
+  "simulation_thread": "",
+  "viewer_thread": "",
+  "command_path": [],
+  "state_path": []
+}
+```
+
+填写规则：
+
+- `entry_file`：Python 仿真器入口文件，相对仓库根目录；
+- `config_file`：保存机器人场景和仿真/显示周期的配置文件；
+- `simulation_thread`：真正调用 `mj_step()` 的线程函数名；
+- `viewer_thread`：调用 `viewer.sync()` 的线程函数名；
+- `command_path`：按顺序写出“接收低层命令的处理函数 → MuJoCo 控制数组 → 物理推进函数”；
+- `state_path`：按顺序写出“MuJoCo 传感器数组 → 组装低层状态的函数 → 最终发布调用”。
+
+路径中的名称使用源码里的原名，不翻译。
+
+填写以后运行：
+
+```bash
+cd 第二次培训/MuJoCo/starter/03_unitree_trace
+bash test.sh
+```
+
+通过时会得到：
+
+```text
+[PASS] unitree_mujoco source trace
+```
+
+这里评测的是源码中确实存在的文件、函数和数据路径。测试没有要求你评价“这个架构好不好”，只检查是否真正把关键链路追到了具体代码。
+
+## 参考：官方 Python 仿真器怎样连起来
+
+下面对应刚才的源码追踪任务，可以在跑过 `test.sh` 以后对照。
+
+入口是：
 
 ```text
 simulate_python/unitree_mujoco.py
 ```
 
-下面直接沿这个文件往下读。
-
-## 8. config.py：先看程序依赖哪些配置
-
-`simulate_python/config.py` 中保存了机器人、场景和时间参数。
-
-当前文件中可以看到：
+配置来自：
 
 ```text
-ROBOT
-ROBOT_SCENE
-SIMULATE_DT
-VIEWER_DT
+simulate_python/config.py
 ```
 
-其中 `ROBOT_SCENE` 决定加载哪份场景。
+当前固定版本中：
 
-当前版本的配置中：
-
-```text
+```python
 SIMULATE_DT = 0.005
-VIEWER_DT   = 0.02
+VIEWER_DT = 0.02
 ```
 
-也就是前面刚算过的 200 Hz 物理步和 50 Hz Viewer。
+因此物理仿真的目标周期是 0.005 s，显示线程每隔约 0.02 s 刷新一次。
 
-这时已经能预期：主程序里很可能存在两个不同频率的循环。
-
-## 9. unitree_mujoco.py：先找到初始化
-
-文件开头创建了一把全局 `threading.Lock`，然后加载：
+入口文件加载场景并创建：
 
 ```text
 MjModel
@@ -403,101 +286,37 @@ MjData
 Viewer
 ```
 
-场景路径来自刚才看到的 `config.ROBOT_SCENE`。
-
-所以目前调用关系是：
-
-```text
-config.py
-   │
-   │ ROBOT_SCENE
-   ↓
-unitree_mujoco.py
-   ↓
-MjModel + MjData + Viewer
-```
-
-这和自己的 `main.py` 已经很接近，只是配置被单独放进了 `config.py`。
-
-## 10. unitree_mujoco.py：两个顶层线程到底干什么
-
-这个文件定义了两个主要线程函数：
+同时创建一把全局 `threading.Lock`。随后定义两个顶层线程函数：
 
 ```text
 SimulationThread
 PhysicsViewerThread
 ```
 
-### SimulationThread
-
-它的循环中会：
-
-1. 记录这一物理步开始的时间；
-2. 获取 `locker`；
-3. 调用 `mujoco.mj_step(mj_model, mj_data)`；
-4. 释放 `locker`；
-5. 根据 `timestep` 睡眠剩余时间。
-
-所以它的职责很明确：**推进物理仿真，并尽量按照 `SIMULATE_DT` 的节奏运行。**
-
-### PhysicsViewerThread
-
-它的循环中会：
-
-1. 获取同一把 `locker`；
-2. 调用 `viewer.sync()`；
-3. 释放 `locker`；
-4. 按 `VIEWER_DT` 睡眠。
-
-所以它负责显示。
-
-前面学的 `Thread`、`Lock` 和“不同频率”现在都能在真实项目里找到对应位置。
-
-主程序最后创建并启动：
+`SimulationThread` 的核心循环可以概括为：
 
 ```text
-Thread(target=PhysicsViewerThread)
-Thread(target=SimulationThread)
+记录本轮开始时间
+→ 获得 locker
+→ mujoco.mj_step(mj_model, mj_data)
+→ 释放 locker
+→ 按剩余 timestep 睡眠
 ```
 
-这就是 Python 线程语法在这个项目里的实际使用。
-
-## 11. 为什么这里需要同一把 Lock
-
-`SimulationThread` 会修改 `mj_data`；`PhysicsViewerThread` 要读取同一份仿真状态并显示。
-
-官方代码用同一个 `locker` 把：
+`PhysicsViewerThread` 则是：
 
 ```text
-mj_step
+获得同一把 locker
+→ viewer.sync()
+→ 释放 locker
+→ sleep(VIEWER_DT)
 ```
 
-和：
+因此这把锁保护的是仿真线程和显示线程共同访问的 MuJoCo 状态；两个线程的周期又分别来自 `SIMULATE_DT` 和 `VIEWER_DT`。
 
-```text
-viewer.sync
-```
+### SDK 命令怎样进入 `data.ctrl`
 
-包在互斥区间中。
-
-因此分析线程设计时，不需要停留在“它用了锁”。可以继续回答：
-
-```text
-锁保护谁？
-→ mj_model / mj_data / Viewer 相关的共享仿真状态
-
-哪两个地方竞争？
-→ SimulationThread 和 PhysicsViewerThread
-
-不加这把锁会失去什么保证？
-→ Viewer 可能在仿真状态正在更新时同时读取相关数据
-```
-
-这才是锁在当前项目里的实际作用。
-
-## 12. unitree_sdk2py_bridge.py：控制输入从哪里进入 MuJoCo
-
-`SimulationThread` 中还会创建：
+`SimulationThread` 中会创建：
 
 ```text
 UnitreeSdk2Bridge(mj_model, mj_data)
@@ -509,86 +328,108 @@ UnitreeSdk2Bridge(mj_model, mj_data)
 simulate_python/unitree_sdk2py_bridge.py
 ```
 
-这个类把 Unitree SDK 的通信数据和 MuJoCo 状态连接起来。
-
-其中一个关键函数是：
+低层命令订阅器把消息交给：
 
 ```text
 LowCmdHandler
 ```
 
-收到低层电机命令以后，它最终会写入：
+这个处理函数逐个电机读取命令中的前馈力矩、目标位置、目标速度、`kp`、`kd`，并根据 MuJoCo 传感器中的当前状态计算控制量，最后写进：
 
 ```text
 mj_data.ctrl[i]
 ```
 
-于是控制方向是：
+随后 `SimulationThread` 的 `mujoco.mj_step(...)` 使用这些控制输入推进下一步物理状态。
+
+所以命令方向可以压成：
 
 ```text
-Unitree LowCmd
-      ↓
+LowCmd
+↓
 LowCmdHandler
-      ↓
+↓
 mj_data.ctrl
-      ↓
-SimulationThread 中的 mj_step
+↓
+mujoco.mj_step
 ```
 
-另一个方向，`PublishLowState` 会读取 MuJoCo 的传感器数据，再通过 SDK 发布机器人状态。
+### MuJoCo 状态怎样重新发布出去
 
-因此整个 Python 仿真器的主数据流可以整理成：
+桥接类还创建了一个周期线程来调用：
+
+```text
+PublishLowState
+```
+
+它从：
+
+```text
+mj_data.sensordata
+```
+
+读取电机位置、速度、估计力矩以及其它传感器信息，写入 `low_state`，最后调用：
+
+```text
+low_state_puber.Write(self.low_state)
+```
+
+因此状态方向是：
+
+```text
+mj_data.sensordata
+↓
+PublishLowState
+↓
+low_state_puber.Write
+```
+
+把两个方向合起来以后，官方仿真器的关键数据流就是：
 
 ```text
 控制程序 / Unitree SDK
           │
           │ LowCmd
           ↓
-UnitreeSdk2Bridge
+   UnitreeSdk2Bridge
           ↓
-     mj_data.ctrl
+      mj_data.ctrl
           ↓
-   SimulationThread
+    SimulationThread
           ↓
-       mj_step
+        mj_step
           ↓
-  MuJoCo 状态 / sensor
-       ↙          ↘
-ViewerThread     UnitreeSdk2Bridge
-viewer.sync      发布 LowState 等状态
+   MuJoCo sensor data
+          ↓
+   UnitreeSdk2Bridge
+          ↓
+       LowState
 ```
 
-这张图已经比“README → 入口 → 主循环”多了一层：每一条箭头都能在具体文件和函数里找到。
+这条链比“看 README、找入口、看看多线程”更具体：每一个箭头都能落到固定版本中的文件、函数和数据成员。
 
-## 13. 自己在仓库里重新走一遍
+### 回到自己的程序
 
-现在不要直接照上面的结论回答，自己从官方仓库重新定位一次。
+自己的四足仿真是否需要照搬官方结构，要看实际职责。
 
-依次找出：
+如果目前只有一个物理循环和一个显示窗口，单线程程序足够清楚；为了“工程化”而强行加入线程没有收益。
 
-1. Python 仿真器的启动命令；
-2. `ROBOT_SCENE` 在哪个文件设置；
-3. `MjModel` 和 `MjData` 在哪里创建；
-4. 哪个函数调用 `mj_step()`；
-5. 哪个函数调用 `viewer.sync()`；
-6. 两个顶层线程在哪里创建；
-7. 它们共用的 `Lock` 在哪里创建；
-8. `LowCmdHandler` 在哪个文件；
-9. 它最终把电机命令写到哪里；
-10. `SIMULATE_DT` 和 `VIEWER_DT` 分别是多少。
+当程序真的出现不同频率的长期任务时，可以逐项迁移已经看过的结构：
 
-这十项都能在 `readme_zh.md`、`simulate_python/config.py`、`simulate_python/unitree_mujoco.py` 和 `simulate_python/unitree_sdk2py_bridge.py` 中直接找到。
+```text
+配置越来越多
+→ 把路径和周期集中到配置模块
 
-## 14. 再回到自己的程序
+仿真与显示需要不同周期
+→ 分成独立循环
 
-读完以后，至少可以对自己的程序做一次有根据的选择。
+两个循环直接访问同一份 MjData
+→ 用同一把 Lock 保护临界区
 
-例如：
+日志/通信只需要状态快照
+→ 通过 Queue 传副本
+```
 
-- 把机器人和场景路径移到独立 `config.py`；
-- 把机器人状态处理和仿真循环拆到不同模块；
-- 如果增加日志线程，用 `Queue` 传递 `qpos.copy()` 等状态副本；
-- 如果真的让多个线程访问同一份 MuJoCo 状态，明确哪些操作需要 `Lock`；
-- 如果仿真和 Viewer 使用不同刷新频率，分别定义它们的周期。
+如果要练习模块化，可以把已经跑通的机器狗程序拆成两个或更多 Python 模块，但拆分前后的行为必须保持一致：仍加载同一场景、使用同一初始姿态、`ctrl` 保持零输入，上一章的模型检查器仍应通过。
 
-线程不是验收必须项。简单程序保持单线程完全可以。这里需要掌握的是：**能写出 Python 线程，知道共享数据怎样同步，并能解释 `unitree_mujoco` 为什么这样组织。**
+这一阶段不把“必须多线程”作为验收条件。源码追踪任务的 `test.sh` 通过，说明已经把官方项目最关键的线程和控制/状态数据流定位到真实代码；自己的程序是否继续拆线程，再由实际需求决定。
