@@ -47,7 +47,7 @@ ros2 param list /controller_node
 ros2 param get /controller_node kp
 ```
 
-这里的实现只在构造函数中把参数读入成员变量，因此本次把参数作为**启动配置**使用。
+这里的实现只在构造函数中把参数读入成员变量，因此本次把参数作为 **启动配置** 使用。
 
 ## 2. 用 launch 启动完整控制链
 
