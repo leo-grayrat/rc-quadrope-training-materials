@@ -157,7 +157,7 @@ Target linear_target(
 第三次的定义保持不变：
 
 ```math
-s=\operatorname{clip}\left(\frac{t}{T},0,1\right)
+s=\mathrm{clip}\left(\frac{t}{T},0,1\right)
 ```
 
 ```math
