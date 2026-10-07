@@ -191,22 +191,6 @@ Left motor position: 1.50 rad
 Right motor position: 1.50 rad
 ```
 
-完成以后，把：
-
-```cpp
-robot.move(1.50);
-```
-
-改成：
-
-```cpp
-robot.move(-0.80);
-```
-
-重新构建并运行，检查相关输出是否都变成 `-0.80 rad`。
-
-还可以暂时从 `CMakeLists.txt` 中去掉一个 `.cpp`，重新构建并观察链接器给出的错误。确认错误以后再把源文件加回来。
-
 ## 本地自测
 
 完成 `starter/05_cmake/` 后，在该目录运行：
