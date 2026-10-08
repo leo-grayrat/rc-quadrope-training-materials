@@ -111,8 +111,6 @@ target_include_directories(robot_core PUBLIC include)
 target_link_libraries(robot_demo PRIVATE robot_core)
 ```
 
-后面接触更复杂的 CMake 项目时还会遇到 `INTERFACE`。当前练习先掌握 `PUBLIC` 和 `PRIVATE` 的基本含义。
-
 ## 单独使用 build 目录
 
 推荐把构建产物放在源码目录之外：
