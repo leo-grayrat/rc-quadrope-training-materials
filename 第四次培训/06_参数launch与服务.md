@@ -85,6 +85,8 @@ def generate_launch_description():
     ])
 ```
 
+`LaunchDescription` 保存这次启动要执行的一组动作；`launch_ros.actions.Node` 表示“启动一个 ROS2 节点”这个动作。`launch_ros` 是 launch 系统中面向 ROS2 节点的部分。
+
 在 `CMakeLists.txt` 的 `ament_package()` 之前安装 launch 文件：
 
 ```cmake
@@ -99,6 +101,8 @@ install(DIRECTORY launch
 <exec_depend>launch_ros</exec_depend>
 <exec_depend>mujoco_bridge</exec_depend>
 ```
+
+`exec_depend` 表示运行这个包时需要存在的依赖；这里 launch 文件运行时要用到 launch 系统和 `mujoco_bridge`。
 
 重新构建：
 
