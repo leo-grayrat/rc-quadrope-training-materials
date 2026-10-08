@@ -40,6 +40,8 @@ ros2 run robot_controller controller_node \
   -p kd:=2.0
 ```
 
+`--ros-args` 表示后面的选项交给 ROS2 解析；`-p name:=value` 在启动时覆盖对应参数，所以这里把 `kp`、`kd` 改成 30.0 和 2.0。
+
 查看当前参数：
 
 ```bash
