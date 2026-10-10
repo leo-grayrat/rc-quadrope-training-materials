@@ -1,0 +1,381 @@
+# 状态、执行器与控制
+
+上一节已经能读取和修改 single joint 的状态，但这个关节还没有任何执行器。现在开始让控制程序真正影响它。
+
+## joint 只规定“怎么动”
+
+single joint 中已经有：
+
+```xml
+<joint name="joint1" type="hinge" axis="0 1 0"/>
+```
+
+它只说明：
+
+> `link` 可以绕 Y 轴旋转。
+
+这还没有说明“谁来给它施加作用”。
+
+要让 `data.ctrl` 真正控制关节，需要在模型中加入 actuator。
+
+## 第一步：给 joint1 加一个 motor
+
+最小写法可以先只看：
+
+```xml
+<actuator>
+    <motor joint="joint1"/>
+</actuator>
+```
+
+`actuator` 是模型中的执行器区域，和 `worldbody` 同级。
+
+里面的：
+
+```xml
+<motor joint="joint1"/>
+```
+
+表示建立一个 motor，并把它连接到 `joint1`。
+
+此时先不加别的属性，就已经足够理解最核心的关系：
+
+```text
+joint1
+  ↑
+motor
+  ↑
+控制输入
+```
+
+实际项目里通常还会给 actuator 命名：
+
+```xml
+<motor name="joint1_motor" joint="joint1"/>
+```
+
+如果还写：
+
+```xml
+gear="1"
+```
+
+就是把传动比例设为 1。
+
+所以比较完整的写法是：
+
+```xml
+<actuator>
+    <motor
+        name="joint1_motor"
+        joint="joint1"
+        gear="1"
+    />
+</actuator>
+```
+
+对于这里最简单的一对一 hinge joint 和 `gear="1"`，可以把后面写入的控制量理解为这个 motor 的直接驱动输入。
+
+仓库中已经放好一个加完 motor 的版本：
+
+- [starter/02_single_joint/motor_scene.xml](./starter/02_single_joint/motor_scene.xml)
+
+## 第二步：观察 ctrl 从哪里出现
+
+先加载**没有 actuator** 的 `scene.xml`：
+
+```python
+model = mujoco.MjModel.from_xml_path(
+    "starter/02_single_joint/scene.xml"
+)
+data = mujoco.MjData(model)
+```
+
+查看：
+
+```python
+print(model.nu)
+```
+
+结果是：
+
+```text
+0
+```
+
+`data.ctrl` 是保存执行器控制输入的数值数组，`model.nu` 记录其中有多少个标量控制输入。这里还没有 actuator，所以 `model.nu == 0`，`data.ctrl` 也没有可写入的控制元素。
+
+再把路径换成：
+
+```text
+starter/02_single_joint/motor_scene.xml
+```
+
+重新创建 `model` 和 `data`，再看：
+
+```python
+print(model.nu)
+print(data.ctrl)
+```
+
+应得到类似：
+
+```text
+1
+[0.]
+```
+
+现在模型中只有一个 motor。一个 actuator 对应一个标量控制输入，因此：
+
+```text
+model.nu = 1
+
+data.ctrl 有 1 个元素
+data.ctrl[0] = 这个 motor 当前的控制输入
+```
+
+这里建立的对应关系是：新增一个 motor actuator，`model.nu` 就增加 1，`data.ctrl` 中也增加一个对应的控制输入元素；具体控制值写在这个数组元素里。
+
+## 第三步：让 motor 真正作用一次
+
+先给控制输入一个值：
+
+```python
+data.ctrl[0] = 1.0
+```
+
+这时还没有推进物理仿真，所以只改了控制输入。
+
+接下来执行：
+
+```python
+mujoco.mj_step(model, data)
+```
+
+MuJoCo 才会根据当前控制输入更新状态。
+
+为了让变化更明显，可以连续推进：
+
+```python
+for _ in range(100):
+    mujoco.mj_step(model, data)
+```
+
+然后比较：
+
+```python
+print(data.qpos)
+print(data.qvel)
+```
+
+关节角和角速度会发生变化。
+
+到这里形成了完整链条：
+
+```text
+MJCF 中定义 joint1
+        ↓
+给 joint1 配 motor
+        ↓
+模型出现一个 ctrl
+        ↓
+data.ctrl[0] = 1.0
+        ↓
+mj_step()
+        ↓
+qpos / qvel 改变
+```
+
+## 多关节模型不能一直写 qpos[0]
+
+single joint 只有一个关节，所以：
+
+```python
+data.qpos[0]
+```
+
+不会产生歧义。
+
+四足机器人有很多关节，如果代码里直接写：
+
+```python
+data.qpos[7]
+```
+
+那我怎么可能记得每个元素都是哪个节点哪个关节呢？调用的时候也无法得知……
+
+因此多关节模型中改为根据关节名字查询。
+
+## 根据名字找到 joint
+
+假设 MJCF 中有：
+
+```xml
+<joint name="joint1" type="hinge" axis="0 1 0"/>
+```
+
+MuJoCo 提供：
+
+```python
+mujoco.mj_name2id(model, object_type, name)
+```
+
+这个函数根据名字返回对象的内部 id。
+
+要查 joint，`object_type` 使用：
+
+```python
+mujoco.mjtObj.mjOBJ_JOINT
+```
+
+所以：
+
+```python
+joint_id = mujoco.mj_name2id(
+    model,
+    mujoco.mjtObj.mjOBJ_JOINT,
+    "joint1",
+)
+```
+
+现在 `joint_id` 表示模型中 `joint1` 的编号。
+
+## joint id 还不是 qpos 下标
+
+找到 joint id 后，还要把它映射到 `data.qpos`。`joint_id` 是 MuJoCo 给模型中每个 joint 的内部编号，可以用来索引 `model.jnt_*` 这类按 joint 排列的属性数组；它并不直接等于 `qpos` 的数组下标。
+
+`model.jnt_qposadr` 本身是一个按 joint id 索引的数组：
+
+```python
+model.jnt_qposadr[joint_id]
+```
+
+取出的这个整数，是该 joint 的位置状态在 `qpos` 数组中的起始下标。之所以是“起始”下标，是因为不同关节占用的状态元素个数不同：这里的 hinge 只占 1 个，而前面见过的 free joint 会占多个。
+
+所以可以分两步写：
+
+```python
+joint_id = mujoco.mj_name2id(
+    model,
+    mujoco.mjtObj.mjOBJ_JOINT,
+    "joint1",
+)
+
+qpos_adr = model.jnt_qposadr[joint_id]
+```
+
+最后读取：
+
+```python
+print(data.qpos[qpos_adr])
+```
+
+对于 single joint，`qpos_adr` 最终仍然是 `0`，所以读到的还是 `qpos[0]`。这里走通的是“名字 → joint id → `qpos` 起始下标”这条映射；到了机器狗模型，同样的写法就不再依赖手写固定下标。
+
+速度状态也需要从 joint id 映射到 `qvel` 的数组下标：
+
+```python
+model.jnt_dofadr[joint_id]
+```
+
+它给出这个 joint 的速度状态在 `qvel` 数组中的起始下标。
+
+## 如果一开始连 joint 名都不知道
+
+完整机器狗里可能有很多 joint，第一次拿到模型时不一定知道它们叫什么。
+
+模型中的 joint 数量是：
+
+```python
+model.njnt
+```
+
+MuJoCo 还提供反向查询：
+
+```python
+mujoco.mj_id2name(model, object_type, object_id)
+```
+
+它可以根据 id 得到名字。
+
+先只查第 0 个 joint：
+
+```python
+name = mujoco.mj_id2name(
+    model,
+    mujoco.mjtObj.mjOBJ_JOINT,
+    0,
+)
+
+print(name)
+```
+
+理解这个以后，再把它放进已经学过的 `for`：
+
+```python
+for joint_id in range(model.njnt):
+    name = mujoco.mj_id2name(
+        model,
+        mujoco.mjtObj.mjOBJ_JOINT,
+        joint_id,
+    )
+    print(joint_id, name)
+```
+
+如果还希望同时看状态在数组中的起始下标，再增加：
+
+```python
+print(
+    joint_id,
+    name,
+    model.jnt_qposadr[joint_id],
+    model.jnt_dofadr[joint_id],
+)
+```
+
+这段循环不是新的特殊技巧，只是把：
+
+```text
+0
+1
+2
+...
+model.njnt - 1
+```
+
+这些 joint id 逐个查名字，以及它们在 `qpos` / `qvel` 中对应的起始下标。
+
+这会直接用于下一篇检查机器狗模型。
+
+## 控制循环现在完整了
+
+现在已经认识：
+
+- `qpos`：位置状态；
+- `qvel`：速度状态；
+- `ctrl`：执行器控制输入；
+- `mj_step()`：根据当前状态和输入推进仿真。
+
+所以最基本的控制循环终于可以写成：
+
+```text
+读取 qpos / qvel
+      ↓
+计算控制输入
+      ↓
+写 ctrl
+      ↓
+mj_step
+      ↓
+viewer.sync
+```
+
+培训任务要求关节输出力矩为 0，所以最终控制输入会很简单：
+
+```python
+data.ctrl[:] = 0.0
+```
+
+这里的 `[:]` 在 Python 基础中已经介绍过，表示把整个 ctrl 数组都设成 0。
+
+下一篇开始处理完整机器狗：先检查转换后的模型，再把 12 个 joint、12 个 actuator、平地和初始趴卧姿态组合起来。
