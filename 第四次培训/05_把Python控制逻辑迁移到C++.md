@@ -1,42 +1,55 @@
 # 把第三次控制逻辑从 Python 迁移到 C++
 
-前一篇已经把 ROS2 通信和 MuJoCo 执行端单独跑通。现在只处理控制器内部的变化：把第三次 Python 里的控制数学和状态机迁移到 C++。
-
-顺序固定为：
+前一篇已经把 MuJoCo 留在 `sim_node`，把控制器留在 `controller_node`。现在 C++ 节点真正缺的不是新的控制理论，而是第三次 Python 控制器已经有的两段计算：
 
 ```text
-纯控制函数
-    ↓
-12 关节映射与状态机
-    ↓
-接回 controller_node
+当前 q / dq + 目标
+→ pd_torque
+→ tau
+
+起点 + 终点 + 时间
+→ linear_target
+→ q_des / dq_des
 ```
 
-## 1. 先迁移纯控制函数
+“迁移成功”的判据也很直接：**给 Python 和 C++ 同一组输入，两边必须得到同一结果。**
 
-第三次控制器中最容易独立验证的是两个纯函数：
+## 先钉住一个具体的 PD 输入
+
+第三次的 `pd_torque()` 定义是：
+
+```math
+\tau
+=
+\tau_{ff}
++K_p(q_{des}-q)
++K_d(\dot q_{des}-\dot q),
+```
+
+最后再把结果限制在 `[-tau_limit, tau_limit]`。
+
+例如固定：
 
 ```text
-pd_torque
-linear_target
+q         = 0.5
+dq        = 0.1
+q_des     = 0.0
+dq_des    = 0.0
+kp        = 20.0
+kd        = 1.0
+tau_ff    = 0.0
+tau_limit = 100.0
 ```
 
-练习目录：
+第三次已经能算出：
 
-```text
-第四次培训/starter/01_control_math_cpp/
+```math
+\tau
+=20(0-0.5)+1(0-0.1)
+=-10.1.
 ```
 
-其中已经给定函数接口，补全 `control_math.cpp` 后运行：
-
-```bash
-cd 第四次培训/starter/01_control_math_cpp
-bash test.sh
-```
-
-### PD
-
-接口：
+C++ 版接口是：
 
 ```cpp
 double pd_torque(
@@ -50,23 +63,53 @@ double pd_torque(
     double tau_limit);
 ```
 
-沿用第三次定义：
+因此下面这次调用：
 
-```math
-\tau = K_p(q_{des}-q)+K_d(\dot q_{des}-\dot q)+\tau_{ff}
+```cpp
+pd_torque(0.5, 0.1, 0.0, 0.0, 20.0, 1.0, 0.0, 100.0)
 ```
 
-并把结果限制在：
+也必须返回 `-10.1`。
 
-```math
-[-\tau_{limit},\tau_{limit}]
+这就是从 Python 迁移到 C++ 时最小的一条等价关系：
+
+```text
+同一组 q / dq / target / gain
+        ↓
+Python pd_torque
+        = 
+C++ pd_torque
+        ↓
+同一个 tau
 ```
 
-测试覆盖普通 PD、纯阻尼以及正负两侧限幅。
+练习目录已经给出函数声明和测试：
 
-### 线性目标轨迹
+```text
+第四次培训/starter/01_control_math_cpp/
+```
 
-接口：
+补全 `control_math.cpp` 后运行：
+
+```bash
+cd 第四次培训/starter/01_control_math_cpp
+bash test.sh
+```
+
+除了刚才的普通 PD，测试还会给纯阻尼和正负两侧的限幅输入。
+
+## 轨迹函数也用同一组数对齐
+
+第三次的站立轨迹从：
+
+```text
+q_start
+→ q_target
+```
+
+在 `duration` 时间内线性移动。
+
+C++ 接口是：
 
 ```cpp
 struct Target
@@ -82,117 +125,205 @@ Target linear_target(
     double duration);
 ```
 
-仍然使用第三次的轨迹：
+例如：
 
-```math
-s=\mathrm{clip}\left(\frac{t}{T},0,1\right)
+```text
+q_start = 0
+q_target = 1
+duration = 2 s
+elapsed = 1 s
 ```
 
-```math
-q_{des}=(1-s)q_{start}+s q_{target}
+这时正好走到一半，所以：
+
+```text
+q_des  = 0.5
+dq_des = 0.5
 ```
 
-运动结束前：
+同一个 starter 的测试会继续检查：
 
-```math
-\dot q_{des}=\frac{q_{target}-q_{start}}{T}
+```text
+t = 0       → 起点
+t = 1       → 中点
+t = 2       → 终点，dq_des = 0
+t > 2       → 保持终点
+1 → -1      → 反方向速度应为负
 ```
 
-结束后：
+所以这一步迁移的对象不是“把 Python 语法翻译成 C++ 语法”，而是保住第三次已经建立的函数关系：
 
-```math
-q_{des}=q_{target},\qquad \dot q_{des}=0
+```text
+输入
+→ 数学关系
+→ 输出
 ```
 
-测试覆盖起点、中点、终点、超过终点和反方向运动。这些输入与第三次 Python 练习检查的是同一组性质。
+语言换了，关系不能换。
 
-## 2. 恢复 12 关节映射和状态机
+## 把一个 `JointState` 关节接到这两个函数
 
-纯函数通过以后，把 `/joint_states` 转成控制器内部的 12 关节状态：
+4.3 中已经能从 ROS2 消息读：
+
+```cpp
+const double q = msg->position[...];
+const double dq = msg->velocity[...];
+```
+
+现在选 `joint_order` 中的一个关节，例如 `FL_hip_joint`。
+
+消息里的数组顺序不保证就是 `joint_order`，所以先用：
+
+```text
+msg->name
+→ 找到 "FL_hip_joint" 在消息中的 index
+→ 用同一个 index 读取 position / velocity
+```
+
+得到这个关节的 `q / dq` 后，控制链已经能完整写成：
+
+```text
+JointState 中的 FL_hip_joint
+        ↓
+q / dq
+        ↓
+当前控制状态
+        ↓
+q_des / dq_des
+        ↓
+pd_torque(...)
+        ↓
+tau
+```
+
+阻尼状态没有位置目标：
+
+```text
+kp = 0
+dq_des = 0
+tau_ff = 0
+```
+
+所以：
+
+```math
+\tau=-K_d\dot q.
+```
+
+站立状态则需要第三次已经实现的线性目标：
+
+```text
+切换到 Standing 的瞬间
+→ 保存这个关节的 q_start
+
+之后每次收到新状态
+→ elapsed = now - stand_start_time
+→ linear_target(q_start, q_stand, elapsed, duration)
+→ q_des / dq_des
+→ pd_torque(...)
+```
+
+这里真正需要新增的状态只有“切换瞬间必须保存一次”的两类量：
+
+```text
+每个关节的 q_start
+统一的 stand_start_time
+```
+
+如果每轮都把当前 `q` 重新写进 `q_start`，轨迹起点就会不断移动，第三次的线性目标关系会被破坏。
+
+## 从一个关节扩到 12 个关节
+
+单关节链正确以后，再把它放进 `joint_order`。
+
+对每条 `JointState`，先建立：
+
+```text
+name
+→ position / velocity 的 index
+```
+
+随后按固定的 `joint_order` 逐个取：
+
+```text
+FL_hip_joint
+FL_thigh_joint
+FL_calf_joint
+...
+```
+
+每个名字经过同一条控制链：
+
+```text
+name
+→ q / dq
+→ 当前状态机目标
+→ pd_torque
+→ tau
+```
+
+最终把 12 个 `tau` 按 `joint_order` 放进：
+
+```cpp
+std_msgs::msg::Float64MultiArray out;
+```
+
+于是两端的数组约定仍然是：
+
+```text
+out.data[0]
+↔ joint_order[0]
+
+out.data[1]
+↔ joint_order[1]
+
+...
+```
+
+这正是上一篇 `sim_node` 用来把力矩重新写回 actuator 的顺序。
+
+## 接回 `controller_node`
+
+控制器回调最终只做四件事：
 
 ```text
 JointState
-   ↓ name → index
-按 joint_order 取 q / dq
-   ↓
-状态机
-   ↓
-目标轨迹
-   ↓
-pd_torque
-   ↓
-按 joint_order 得到 12 个 tau
+    ↓
+按名字恢复 joint_order 下的 12 个 q / dq
+    ↓
+根据 Damping / Standing 生成目标
+    ↓
+对每个关节调用 pd_torque
+    ↓
+发布 12 个 tau
 ```
 
-阻尼和站立仍然使用第三次的两个状态：
+MuJoCo 节点不需要改控制数学；它仍然发布状态、接收力矩并写入 `data.ctrl`。
 
-```cpp
-enum class ControlState
-{
-  Damping,
-  Standing,
-};
+### 验收
+
+先运行纯函数测试：
+
+```bash
+cd 第四次培训/starter/01_control_math_cpp
+bash test.sh
 ```
 
-切换到 `Standing` 时保存一次：
+然后手工发布一条固定的 `JointState`。对其中一个关节使用前面的简单输入，例如：
 
 ```text
-q_start
-stand_start_time
+q = 0.5
+dq = 0.1
+q_des = 0
+dq_des = 0
+kp = 20
+kd = 1
 ```
 
-随后每次收到新的 `JointState`：
+对应位置的输出力矩应为：
 
 ```text
-Damping
-  → kp = 0
-  → dq_des = 0
-  → pd_torque
-
-Standing
-  → elapsed = now - stand_start_time
-  → linear_target
-  → pd_torque
+-10.1
 ```
 
-同一个控制器内部使用同一种时间来源计算 `elapsed`。
-
-这里可以分层检查错误来源：单关节结果错，检查纯函数；单关节正确而 12 关节错，检查名字映射和 `joint_order`；12 个控制量都正确以后，再检查 ROS2 和 MuJoCo 两端。
-
-## 3. 接回 `controller_node`
-
-最后把状态机放进 `/joint_states` 的回调：
-
-```text
-/joint_states
-      ↓
-12 个 q / dq
-      ↓
-状态机 + linear_target + pd_torque
-      ↓
-12 个 tau
-      ↓
-/joint_torques
-```
-
-MuJoCo 节点仍然只负责上一篇已经完成的状态发布和力矩执行。
-
-### 检查点
-
-**产物**：C++ 版 `pd_torque`、`linear_target` 和两状态控制逻辑，并接入 `controller_node`。
-
-**给定边界**：
-
-- 数学定义沿用第三次；
-- 关节顺序沿用 `joint_order`；
-- 话题名和消息类型沿用前两篇；
-- 状态切换逻辑沿用第三次的阻尼/站立要求。
-
-**判定方式**：
-
-1. `starter/01_control_math_cpp/test.sh` 全部通过；
-2. 手工发送一条 12 关节 `JointState` 后，`/joint_torques` 恰好有 12 个元素；
-3. 对同一组固定状态和参数，C++ 控制器与第三次 Python 版本输出的目标和力矩在浮点误差范围内一致；
-4. 接回 `sim_node` 后，MuJoCo 一侧的话题接口不需要修改。
-
-纯函数、关节映射、ROS2 联调分别有自己的检查信号，出现问题时可以按层定位。
+单个关节能和手算对上以后，再检查 12 个输出是否按 `joint_order` 排列。最后接回 `sim_node`，同一组固定状态下，C++ 控制器应与第三次 Python 控制器产生相同的目标和力矩（允许正常浮点误差）。
