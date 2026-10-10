@@ -129,7 +129,7 @@ mj_model.opt.timestep = config.SIMULATE_DT
 sleep 剩余时间
 ```
 
-它不是简单地“每轮 sleep(0.005)”；计算时间本身已经占用了周期的一部分。
+计算时间本身已经占用了周期的一部分，因此 `sleep` 使用的是这一轮剩余的时间。
 
 ## 两个线程为什么要共用一把 `Lock`
 
@@ -177,7 +177,7 @@ PhysicsViewerThread
 → 释放
 ```
 
-这里需要学习的是“为什么这两处必须共享同一个锁”，而不是背一个孤立的 `Lock` API。
+两处必须共享同一个 `locker`，这样 `mj_step()` 和 `viewer.sync()` 才会进入同一个互斥范围。
 
 ## 电机命令究竟在哪里进入 MuJoCo
 
